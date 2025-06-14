@@ -42,9 +42,7 @@ After installing uv, set up the project:
 git clone <your-repo-url>
 cd build-with-AI-sessions
 
-# Create virtual environment and install dependencies
-uv venv
-uv pip sync requirements.txt  # or uv pip install -r requirements.txt
+uv sync
 
 # Activate virtual environment (optional, uv handles this automatically)
 # Windows: .venv\Scripts\activate
