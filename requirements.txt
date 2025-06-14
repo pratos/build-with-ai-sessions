@@ -1,0 +1,9 @@
+firecrawl>=2.7.1
+instructor>=1.8.3
+matplotlib>=3.10.3
+numpy>=2.3.0
+openai>=1.86.0
+pillow>=11.2.1
+pydantic>=2.11.6
+pydantic-ai>=0.2.18
+requests>=2.32.4
