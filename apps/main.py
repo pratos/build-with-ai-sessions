@@ -132,7 +132,8 @@ pages = {
     "💬 Basic LLM Call": "llm_call",
     "🔧 LLM + Tool Call": "tool_call", 
     "🔄 ReAct Agent": "react_agent",
-    "🤝 Multi-Agent Workflow": "multi_agent"
+    "🤝 Multi-Agent Workflow": "multi_agent",
+    "⚖️ ReAct vs Multi-Agent": "comparison"
 }
 
 # Get the selected page from query params or default to home
@@ -192,4 +193,6 @@ elif st.session_state.page == "tool_call":
 elif st.session_state.page == "react_agent":
     exec(open("apps/pages/react_agent.py").read())
 elif st.session_state.page == "multi_agent":
-    exec(open("apps/pages/multi_agent.py").read()) 
+    exec(open("apps/pages/multi_agent.py").read())
+elif st.session_state.page == "comparison":
+    exec(open("apps/pages/comparison.py").read()) 
