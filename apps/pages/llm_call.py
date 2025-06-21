@@ -1,7 +1,7 @@
 import streamlit as st
 import openai
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 st.markdown("# 💬 Basic LLM Call")
 st.markdown("---")
@@ -133,20 +133,86 @@ print(response.choices[0].message.content)
         except Exception as e:
             st.error(f"Error: {str(e)}")
     
+    # Additional structured output example
+    st.markdown("---")
+    st.markdown("### 📊 Advanced Structured Output")
+    
+    class ProductAnalysis(BaseModel):
+        product_name: str
+        pros: List[str]
+        cons: List[str]
+        rating: int  # 1-10
+        recommendation: str
+        target_audience: List[str]
+    
+    analysis_prompt = st.text_area(
+        "Product to analyze:", 
+        value="iPhone 15 Pro smartphone",
+        height=60
+    )
+    
+    if st.button("🔍 Analyze Product", type="secondary"):
+        try:
+            with st.spinner("🔄 Analyzing product..."):
+                response = client.beta.chat.completions.parse(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a product analysis expert. Provide balanced, detailed product reviews."},
+                        {"role": "user", "content": f"Analyze this product: {analysis_prompt}"}
+                    ],
+                    response_format=ProductAnalysis
+                )
+            
+            product_data = response.choices[0].message.parsed
+            
+            st.markdown("### 📱 Product Analysis:")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Product:** {product_data.product_name}")
+                st.metric("Rating", f"{product_data.rating}/10")
+                
+                st.markdown("**✅ Pros:**")
+                for pro in product_data.pros:
+                    st.success(f"• {pro}")
+                
+                st.markdown("**❌ Cons:**")
+                for con in product_data.cons:
+                    st.error(f"• {con}")
+            
+            with col2:
+                st.markdown("**🎯 Target Audience:**")
+                for audience in product_data.target_audience:
+                    st.info(f"• {audience}")
+                
+                st.markdown("**💡 Recommendation:**")
+                st.text_area("", value=product_data.recommendation, height=150, disabled=True)
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+    
     with st.expander("Show structured output code"):
         st.code("""
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
-# Define the structure we want
+# Define the structures we want
 class EmailStructure(BaseModel):
     subject: str
     body: str
     tone: str
     urgency: Optional[str] = None
 
-# Request structured output
-response = client.beta.chat.completions.parse(
+class ProductAnalysis(BaseModel):
+    product_name: str
+    pros: List[str]
+    cons: List[str]
+    rating: int  # 1-10
+    recommendation: str
+    target_audience: List[str]
+
+# Email structured output
+email_response = client.beta.chat.completions.parse(
     model="gpt-4o-mini",
     messages=[
         {"role": "system", "content": "You are a professional email assistant."},
@@ -155,10 +221,25 @@ response = client.beta.chat.completions.parse(
     response_format=EmailStructure
 )
 
-# Get structured data
-email_data = response.choices[0].message.parsed
+email_data = email_response.choices[0].message.parsed
 print(f"Subject: {email_data.subject}")
 print(f"Body: {email_data.body}")
+
+# Product analysis structured output
+product_response = client.beta.chat.completions.parse(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "system", "content": "You are a product analysis expert."},
+        {"role": "user", "content": "Analyze the iPhone 15 Pro"}
+    ],
+    response_format=ProductAnalysis
+)
+
+product_data = product_response.choices[0].message.parsed
+print(f"Product: {product_data.product_name}")
+print(f"Rating: {product_data.rating}/10")
+print(f"Pros: {', '.join(product_data.pros)}")
+print(f"Target: {', '.join(product_data.target_audience)}")
         """, language="python")
 
 else:

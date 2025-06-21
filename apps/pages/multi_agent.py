@@ -772,117 +772,215 @@ if api_key:
                 st.markdown("### 🎉 Team Results")
                 st.success(result.final_output)
                 
-                # Display detailed execution log
-                st.markdown("### 📋 Execution Log")
+                # Display detailed execution log with ReAct-style breakdown
+                st.markdown("### 📋 Multi-Agent Execution Steps")
                 
                 for i, log_entry in enumerate(execution_log):
                     # Determine status icon and color
                     if log_entry["status"] == "success":
                         status_icon = "✅"
+                        status_color = "green"
                     elif log_entry["status"] == "error":
                         status_icon = "❌"
+                        status_color = "red"
                     elif log_entry["status"] == "in_progress":
                         status_icon = "🔄"
+                        status_color = "blue"
                     else:
                         status_icon = "ℹ️"
+                        status_color = "gray"
                     
-                    # Create expandable section for each log entry
+                    # Create expandable section for each step (similar to ReAct)
                     timestamp_str = log_entry["timestamp"].strftime("%H:%M:%S.%f")[:-3]
+                    step_title = f"Step {i+1}: {log_entry['step'].upper()}" if log_entry.get('step') else f"Step {i+1}: {log_entry['action']}"
                     tools_info = f" | Tools: {', '.join(log_entry.get('tools_used', []))}" if log_entry.get('tools_used') else ""
-                    with st.expander(f"{status_icon} [{timestamp_str}] {log_entry['agent']}: {log_entry['action']}{tools_info}", expanded=False):
+                    
+                    with st.expander(f"{status_icon} {step_title} - {log_entry['agent']}{tools_info}", expanded=False):
                         
+                        # Show step metadata (similar to ReAct)
                         col1, col2 = st.columns(2)
                         with col1:
                             st.markdown(f"**Agent:** {log_entry['agent']}")
-                            st.markdown(f"**Step:** {log_entry['step']}")
-                            st.markdown(f"**Status:** {log_entry['status']}")
-                        
+                            st.markdown(f"**Model:** gpt-4o-mini")  # Multi-agent uses this model
                         with col2:
-                            st.markdown(f"**Action:** {log_entry['action']}")
+                            st.markdown(f"**API Cost:** {log_entry.get('cost', 'Not available')}")
                             st.markdown(f"**Timestamp:** {timestamp_str}")
-                            st.markdown(f"**Cost:** {log_entry.get('cost', 'Not available')}")
                         
+                        # Show agent's action/thinking
+                        if log_entry.get("action"):
+                            st.markdown("**🤖 Agent Action:**")
+                            st.info(log_entry["action"])
+                        
+                        # Show tools used (similar to ReAct tool calls)
                         if log_entry.get("tools_used"):
                             st.markdown("**🔧 Tools Used:**")
-                            st.info(", ".join(log_entry["tools_used"]))
+                            for j, tool in enumerate(log_entry["tools_used"]):
+                                st.markdown(f"**Tool {j+1}: `{tool}`** | Cost: Not available")
+                                
+                                # Show tool result
+                                if log_entry.get("raw_output"):
+                                    st.success(f"✅ Tool Result: {tool} executed successfully")
                         
+                        # Show step details
                         if log_entry.get("details"):
-                            st.markdown("**Details:**")
+                            st.markdown("**📋 Step Details:**")
                             st.info(log_entry["details"])
                         
+                        # Show raw output in expandable section (like ReAct)
                         if log_entry.get("raw_output"):
-                            st.markdown("**🔍 Raw Output:**")
-                            with st.expander("Show Raw Output", expanded=False):
+                            with st.expander(f"🔍 Raw Output from {log_entry['agent']}", expanded=False):
                                 st.code(log_entry["raw_output"], language="text")
                         
+                        # Show step error
                         if log_entry.get("error"):
-                            st.markdown("**Error:**")
-                            st.error(log_entry["error"])
+                            st.error(f"❌ Step Error: {log_entry['error']}")
+                            
+                            # Provide specific error guidance (like ReAct)
+                            if "api" in log_entry["error"].lower() or "key" in log_entry["error"].lower():
+                                st.info("💡 **API Key Issue**: Check that your OpenAI API key is valid and has sufficient credits.")
+                            elif "timeout" in log_entry["error"].lower():
+                                st.info("💡 **Timeout Issue**: The request may be too complex. Try a simpler request.")
+                            elif "event loop" in log_entry["error"].lower():
+                                st.info("💡 **Event Loop Issue**: Try refreshing the page and running again.")
+                            else:
+                                st.info("💡 **General Error**: Try refreshing the page. If the issue persists, check your API keys.")
                 
-                # Show the agent workflow messages if available
+                # Show the agent workflow messages with detailed breakdown (like ReAct)
                 st.markdown("### 👥 Agent Collaboration Flow")
                 
                 if hasattr(result, 'messages') and result.messages:
                     agent_steps = []
+                    tool_usage_map = {}
+                    
+                    # Process messages to extract agent interactions and tool usage
                     for i, message in enumerate(result.messages):
                         if hasattr(message, 'role') and message.role == 'assistant':
                             agent_name = getattr(message, 'name', 'Unknown Agent')
                             content = getattr(message, 'content', '')
                             
-                            if content:
+                            # Check for tool calls in the message
+                            tool_calls = getattr(message, 'tool_calls', [])
+                            tools_used = []
+                            if tool_calls:
+                                for tool_call in tool_calls:
+                                    if hasattr(tool_call, 'function'):
+                                        tools_used.append(tool_call.function.name)
+                            
+                            if content or tools_used:
                                 agent_steps.append({
                                     "step_number": len(agent_steps) + 1,
                                     "agent_name": agent_name,
                                     "content": content,
-                                    "message_index": i
+                                    "message_index": i,
+                                    "tools_used": tools_used,
+                                    "has_tool_calls": len(tools_used) > 0
                                 })
+                                
+                                # Track tool usage per agent
+                                if agent_name not in tool_usage_map:
+                                    tool_usage_map[agent_name] = set()
+                                tool_usage_map[agent_name].update(tools_used)
                     
                     if agent_steps:
+                        # Show overall collaboration summary first
+                        st.markdown("**🔄 Collaboration Summary:**")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Agent Steps", len(agent_steps))
+                        with col2:
+                            st.metric("Agents Involved", len(set(step['agent_name'] for step in agent_steps)))
+                        with col3:
+                            total_tool_calls = sum(len(step['tools_used']) for step in agent_steps)
+                            st.metric("Total Tool Calls", total_tool_calls)
+                        
+                        # Show detailed agent steps (similar to ReAct format)
                         for step in agent_steps:
-                            with st.expander(f"🤖 Step {step['step_number']}: {step['agent_name']}", expanded=False):
-                                # Show agent metadata
+                            # Determine step status
+                            if step.get("has_tool_calls"):
+                                status_icon = "🔧"
+                                step_type = "TOOL USAGE"
+                            elif step.get("content"):
+                                status_icon = "💭"
+                                step_type = "THINKING"
+                            else:
+                                status_icon = "ℹ️"
+                                step_type = "INFO"
+                            
+                            with st.expander(f"{status_icon} Agent Step {step['step_number']}: {step_type} - {step['agent_name']}", expanded=False):
+                                
+                                # Show step metadata (similar to ReAct)
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     st.markdown(f"**Agent:** {step['agent_name']}")
-                                    st.markdown(f"**Step:** {step['step_number']}")
+                                    st.markdown(f"**Model:** gpt-4o-mini")
                                 with col2:
+                                    st.markdown(f"**API Cost:** Not available")
                                     st.markdown(f"**Message Index:** {step['message_index']}")
-                                    st.markdown(f"**Cost:** Not available")
                                 
-                                st.markdown("**🔧 Tools Available:**")
-                                # Determine likely tools based on agent name
-                                if "Exa" in step['agent_name']:
+                                # Show agent's thinking/reasoning
+                                if step.get("content"):
+                                    st.markdown("**🤖 Agent's Response:**")
+                                    st.info(step["content"])
+                                
+                                # Show tools used (similar to ReAct tool calls)
+                                if step.get("tools_used"):
+                                    st.markdown("**🔧 Tools Used:**")
+                                    for j, tool in enumerate(step["tools_used"]):
+                                        st.markdown(f"**Tool {j+1}: `{tool}`** | Cost: Not available")
+                                        st.success(f"✅ Tool Result: {tool} executed by {step['agent_name']}")
+                                
+                                # Show available tools for this agent type
+                                st.markdown("**🛠️ Agent's Available Tools:**")
+                                if "Exa" in step['agent_name'] or "Web" in step['agent_name']:
                                     st.info("🌐 Web search, Company research, arXiv papers, Twitter, Papers with Code")
-                                elif "Research" in step['agent_name']:
+                                elif "Research" in step['agent_name'] and "Specialist" in step['agent_name']:
                                     st.info("🔍 Information search, Market data")
+                                elif "arXiv" in step['agent_name']:
+                                    st.info("📚 arXiv paper search, Academic research")
+                                elif "Twitter" in step['agent_name']:
+                                    st.info("🐦 Twitter search, Social media analysis")
+                                elif "Papers with Code" in step['agent_name']:
+                                    st.info("💻 Code implementations, Benchmarks")
                                 elif "Analysis" in step['agent_name'] or "Analyst" in step['agent_name']:
-                                    st.info("📊 Data analysis, Pattern recognition")
+                                    st.info("📊 Data analysis, Pattern recognition, Strategic thinking")
                                 elif "Coordinator" in step['agent_name']:
-                                    st.info("🤝 Agent handoffs, Task delegation")
+                                    st.info("🤝 Agent handoffs, Task delegation, Workflow management")
+                                elif "Writer" in step['agent_name'] or "Writing" in step['agent_name']:
+                                    st.info("✍️ Content creation, Report writing")
                                 else:
-                                    st.info("📝 Content generation, Writing")
+                                    st.info("📝 Content generation, Creative enhancement")
                                 
-                                st.markdown("**Agent Output:**")
-                                st.markdown(step['content'])
+                                # Show raw output in expandable section (like ReAct)
+                                if step.get("content"):
+                                    with st.expander(f"🔍 Raw Output from {step['agent_name']}", expanded=False):
+                                        st.code(step["content"], language="text")
                                 
-                                # Show raw output
-                                with st.expander("🔍 Raw Agent Output", expanded=False):
-                                    st.code(step['content'], language="text")
-                                
-                                # Add some metadata
-                                st.markdown("---")
-                                st.caption(f"Message index: {step['message_index']} | Agent: {step['agent_name']}")
+                                # Show handoff information if this is a coordinator
+                                if "Coordinator" in step['agent_name']:
+                                    st.markdown("**🔄 Possible Handoffs:**")
+                                    st.info("This agent can delegate tasks to specialized agents based on the request type")
+                        
+                        # Show tool usage summary per agent
+                        if tool_usage_map:
+                            st.markdown("### 🔧 Tool Usage by Agent")
+                            for agent_name, tools in tool_usage_map.items():
+                                if tools:
+                                    with st.expander(f"🤖 {agent_name} - Used {len(tools)} tool(s)", expanded=False):
+                                        for tool in sorted(tools):
+                                            st.success(f"✅ {tool}")
                     else:
                         st.info("No detailed agent messages available, but workflow completed successfully!")
                 else:
                     st.info("Agent workflow completed successfully!")
                 
-                # Show execution summary
-                st.markdown("### 📊 Execution Summary")
+                # Show execution summary (enhanced like ReAct)
+                st.markdown("### 📊 Multi-Agent Execution Summary")
                 total_time = datetime.now() - start_time
                 success_count = sum(1 for log in execution_log if log["status"] == "success")
                 error_count = sum(1 for log in execution_log if log["status"] == "error")
+                in_progress_count = sum(1 for log in execution_log if log["status"] == "in_progress")
                 
+                # Main metrics
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Total Time", f"{total_time.total_seconds():.2f}s")
@@ -893,42 +991,187 @@ if api_key:
                 with col4:
                     st.metric("Errors", error_count)
                 
-                # Cost summary
-                st.markdown("### 💰 Cost Summary")
-                total_tools = sum(len(log.get("tools_used", [])) for log in execution_log)
+                # Agent-specific metrics
                 agents_used = set(log["agent"] for log in execution_log if log["agent"] != "System")
+                total_tools = sum(len(log.get("tools_used", [])) for log in execution_log)
                 
+                st.markdown("### 🤖 Agent Activity Summary")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Agents Used", len(agents_used))
+                    st.metric("Unique Agents", len(agents_used))
                 with col2:
                     st.metric("Total Tool Calls", total_tools)
                 with col3:
-                    # Try to calculate total cost
-                    total_cost = 0
-                    cost_available = False
+                    # Calculate agent handoffs (transitions between different agents)
+                    handoffs = 0
+                    prev_agent = None
                     for log in execution_log:
-                        if log.get("cost") and "$" in str(log["cost"]):
-                            try:
-                                cost_str = log["cost"].split("$")[1].split(" ")[0]
-                                total_cost += float(cost_str)
-                                cost_available = True
-                            except:
-                                pass
-                    
+                        if log["agent"] != "System" and prev_agent and log["agent"] != prev_agent:
+                            handoffs += 1
+                        if log["agent"] != "System":
+                            prev_agent = log["agent"]
+                    st.metric("Agent Handoffs", handoffs)
+                
+                # Cost analysis (enhanced like ReAct)
+                st.markdown("### 💰 Cost Analysis")
+                col1, col2, col3 = st.columns(3)
+                
+                # Calculate total cost
+                total_cost = 0
+                cost_available = False
+                api_calls = 0
+                
+                for log in execution_log:
+                    if log.get("cost") and "$" in str(log["cost"]):
+                        try:
+                            cost_str = log["cost"].split("$")[1].split(" ")[0]
+                            total_cost += float(cost_str)
+                            cost_available = True
+                            api_calls += 1
+                        except:
+                            pass
+                
+                with col1:
+                    st.metric("API Calls", api_calls)
+                with col2:
+                    st.metric("Tool Executions", total_tools)
+                with col3:
                     if cost_available:
-                        st.metric("Estimated Cost", f"${total_cost:.6f}")
+                        st.metric("Estimated Total Cost", f"${total_cost:.6f}")
                     else:
-                        st.metric("Estimated Cost", "Not available")
+                        st.metric("Estimated Total Cost", "Not available")
                 
-                # Show which agents were active
+                # Show detailed agent breakdown
                 if agents_used:
-                    st.markdown("**🤖 Active Agents:**")
-                    agent_list = ", ".join(sorted(agents_used))
-                    st.info(agent_list)
+                    st.markdown("### 🎯 Agent Performance Breakdown")
+                    
+                    agent_stats = {}
+                    for log in execution_log:
+                        agent = log["agent"]
+                        if agent != "System":
+                            if agent not in agent_stats:
+                                agent_stats[agent] = {
+                                    "steps": 0,
+                                    "tools": 0,
+                                    "success": 0,
+                                    "errors": 0,
+                                    "cost": 0
+                                }
+                            
+                            agent_stats[agent]["steps"] += 1
+                            agent_stats[agent]["tools"] += len(log.get("tools_used", []))
+                            
+                            if log["status"] == "success":
+                                agent_stats[agent]["success"] += 1
+                            elif log["status"] == "error":
+                                agent_stats[agent]["errors"] += 1
+                            
+                            # Try to add cost
+                            if log.get("cost") and "$" in str(log["cost"]):
+                                try:
+                                    cost_str = log["cost"].split("$")[1].split(" ")[0]
+                                    agent_stats[agent]["cost"] += float(cost_str)
+                                except:
+                                    pass
+                    
+                    # Display agent stats in expandable sections
+                    for agent_name, stats in agent_stats.items():
+                        success_rate = (stats["success"] / stats["steps"] * 100) if stats["steps"] > 0 else 0
+                        
+                        with st.expander(f"🤖 {agent_name} - {stats['steps']} steps, {success_rate:.1f}% success", expanded=False):
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("Steps", stats["steps"])
+                            with col2:
+                                st.metric("Tools Used", stats["tools"])
+                            with col3:
+                                st.metric("Success Rate", f"{success_rate:.1f}%")
+                            with col4:
+                                if stats["cost"] > 0:
+                                    st.metric("Cost", f"${stats['cost']:.6f}")
+                                else:
+                                    st.metric("Cost", "Not available")
+                            
+                            # Show agent role
+                            if "Coordinator" in agent_name:
+                                st.info("🎯 **Role**: Manages workflow and delegates to specialized agents")
+                            elif "Exa" in agent_name or "Web" in agent_name:
+                                st.info("🌐 **Role**: Real-time web search and current information")
+                            elif "Research" in agent_name:
+                                st.info("🔍 **Role**: Information gathering and research")
+                            elif "Analysis" in agent_name or "Analyst" in agent_name:
+                                st.info("📊 **Role**: Data analysis and strategic insights")
+                            elif "Writer" in agent_name or "Writing" in agent_name:
+                                st.info("✍️ **Role**: Content creation and report writing")
+                            else:
+                                st.info("🤖 **Role**: Specialized task execution")
                 
+                # Final status indicator (like ReAct)
+                st.markdown("### 🎯 Task Completion Status")
                 if error_count == 0:
+                    st.success("🎉 **Multi-Agent Workflow Completed Successfully!**")
+                    if success_count > 0:
+                        st.info(f"✅ All {success_count} steps completed without errors")
                     st.balloons()
+                elif success_count > error_count:
+                    st.warning(f"⚠️ **Workflow Completed with {error_count} Error(s)**")
+                    st.info(f"✅ {success_count} successful steps, ❌ {error_count} failed steps")
+                else:
+                    st.error("❌ **Workflow Failed**")
+                    st.info(f"Multiple errors occurred during execution ({error_count} errors, {success_count} successes)")
+                
+                # Show workflow insights (like ReAct's final insights)
+                st.markdown("### 💡 Workflow Insights")
+                
+                # Calculate some insights
+                if agents_used:
+                    most_active_agent = max(agent_stats.items(), key=lambda x: x[1]["steps"])[0] if 'agent_stats' in locals() else "Unknown"
+                    total_agent_steps = sum(stats["steps"] for stats in agent_stats.values()) if 'agent_stats' in locals() else 0
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**🏆 Most Active Agent:**")
+                        st.info(f"{most_active_agent}")
+                        
+                        st.markdown("**⚡ Execution Efficiency:**")
+                        if total_time.total_seconds() > 0:
+                            steps_per_second = len(execution_log) / total_time.total_seconds()
+                            st.info(f"{steps_per_second:.2f} steps/second")
+                        else:
+                            st.info("Instant execution")
+                    
+                    with col2:
+                        st.markdown("**🔧 Tool Usage:**")
+                        if total_tools > 0:
+                            st.info(f"{total_tools} tools executed across {len(agents_used)} agents")
+                        else:
+                            st.info("No external tools used")
+                        
+                        st.markdown("**🤝 Collaboration:**")
+                        if handoffs > 0:
+                            st.info(f"{handoffs} handoffs between agents")
+                        else:
+                            st.info("Single agent execution")
+                
+                # Show recommendations for improvement (like ReAct)
+                if error_count > 0:
+                    st.markdown("### 🔧 Recommendations for Next Run")
+                    recommendations = []
+                    
+                    if "api" in str([log.get("error", "") for log in execution_log]).lower():
+                        recommendations.append("🔑 **API Keys**: Verify all API keys are valid and have sufficient credits")
+                    
+                    if "timeout" in str([log.get("error", "") for log in execution_log]).lower():
+                        recommendations.append("⏱️ **Complexity**: Try breaking down the request into smaller, more specific tasks")
+                    
+                    if error_count > success_count:
+                        recommendations.append("🎯 **Scope**: Consider simplifying the request or using fewer agents")
+                    
+                    if not recommendations:
+                        recommendations.append("🔄 **Retry**: Try running the same request again - some errors may be temporary")
+                    
+                    for rec in recommendations:
+                        st.info(rec)
                     
         except concurrent.futures.TimeoutError:
             execution_log.append({

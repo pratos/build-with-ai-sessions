@@ -4,6 +4,8 @@ import json
 import requests
 from datetime import datetime
 import random
+from pydantic import BaseModel
+from typing import List, Optional
 
 st.markdown("# 🔧 LLM + Tool Call")
 st.markdown("---")
@@ -21,6 +23,11 @@ AI can now use external tools:
 # Check for API key from session state
 api_key = st.session_state.get("openai_api_key")
 
+class ToolCallSummary(BaseModel):
+    tools_used: List[str]
+    summary: str
+    key_findings: List[str]
+
 if api_key:
     client = openai.Client(api_key=api_key)
     
@@ -35,12 +42,20 @@ if api_key:
     def calculate(expression: str) -> str:
         """Safely calculate mathematical expressions"""
         try:
-            # Simple safety check
-            allowed_chars = set('0123456789+-*/.()')
+            # Allow common mathematical characters including ^ for exponentiation
+            allowed_chars = set('0123456789+-*/.()^')
             if not all(c in allowed_chars or c.isspace() for c in expression):
                 return "Error: Invalid characters in expression"
-            result = eval(expression)
-            return f"The result of {expression} is {result}"
+            
+            # Store original expression for display
+            original_expression = expression
+            
+            # Replace ^ with ** for Python exponentiation
+            python_expression = expression.replace('^', '**')
+            result = eval(python_expression)
+            
+            # Format result nicely - avoid LaTeX conflicts
+            return f"The result of {original_expression} is {result}"
         except Exception as e:
             return f"Error calculating {expression}: {str(e)}"
     
@@ -180,6 +195,82 @@ if api_key:
                     st.info("AI didn't need to use any tools for this request.")
                     st.markdown("### 🎉 AI Response:")
                     st.markdown(f"**{response_message.content}**")
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+    
+    # Structured Output Example
+    st.markdown("---")
+    st.markdown("### 🏗️ Structured Tool Call Summary")
+    st.markdown("Get organized results from multiple tool calls.")
+    
+    summary_prompt = st.text_area(
+        "Ask for a comprehensive analysis:", 
+        value="Get weather for Tokyo and London, calculate 15% tip on $120, and tell me the current time. Then summarize everything.",
+        height=80
+    )
+    
+    if st.button("📊 Get Structured Summary", type="secondary"):
+        try:
+            with st.spinner("🔄 Processing with structured output..."):
+                # First, make tool calls as usual
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": summary_prompt}],
+                    tools=tools,
+                    tool_choice="auto"
+                )
+                
+                response_message = response.choices[0].message
+                tool_calls = response_message.tool_calls
+                
+                if tool_calls:
+                    messages = [
+                        {"role": "user", "content": summary_prompt},
+                        response_message.model_dump()
+                    ]
+                    
+                    # Execute tool calls
+                    tool_results = []
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+                        function_response = available_functions[function_name](**function_args)
+                        tool_results.append(f"{function_name}: {function_response}")
+                        
+                        messages.append({
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": function_name,
+                            "content": function_response,
+                        })
+                    
+                    # Now get structured summary
+                    structured_response = client.beta.chat.completions.parse(
+                        model="gpt-4o-mini",
+                        messages=messages + [
+                            {"role": "user", "content": "Please provide a structured summary of all the tool results and analysis."}
+                        ],
+                        response_format=ToolCallSummary
+                    )
+                    
+                    summary_data = structured_response.choices[0].message.parsed
+                    
+                    st.markdown("### 📊 Structured Summary:")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**🔧 Tools Used:**")
+                        for tool in summary_data.tools_used:
+                            st.info(f"• {tool}")
+                        
+                        st.markdown("**🔍 Key Findings:**")
+                        for finding in summary_data.key_findings:
+                            st.success(f"• {finding}")
+                    
+                    with col2:
+                        st.markdown("**📝 Summary:**")
+                        st.text_area("", value=summary_data.summary, height=200, disabled=True)
                 
         except Exception as e:
             st.error(f"Error: {str(e)}")

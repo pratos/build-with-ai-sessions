@@ -4,6 +4,8 @@ import json
 import random
 from datetime import datetime
 import time
+from pydantic import BaseModel
+from typing import List, Optional
 
 # Cost tracking (approximate costs in USD)
 OPENAI_COSTS = {
@@ -65,6 +67,27 @@ except ImportError:
 if api_key:
     client = openai.Client(api_key=api_key)
     
+    # Pydantic models for structured outputs
+    class ReActStep(BaseModel):
+        step_number: int
+        thought: str
+        action: str
+        action_input: str
+        observation: str
+        
+    class ReActSummary(BaseModel):
+        total_steps: int
+        tools_used: List[str]
+        final_answer: str
+        key_insights: List[str]
+        reasoning_chain: str
+        
+    class TaskAnalysis(BaseModel):
+        task_complexity: str  # "simple", "moderate", "complex"
+        required_tools: List[str]
+        estimated_steps: int
+        approach_strategy: str
+    
     # Tool selection toggle
     st.markdown("### 🔧 Tool Configuration")
     use_exa = st.toggle(
@@ -120,10 +143,15 @@ if api_key:
             if not all(c in allowed_chars or c.isspace() for c in expression):
                 return "Error: Invalid characters in expression"
             
+            # Store original expression for display
+            original_expression = expression
+            
             # Replace ^ with ** for Python exponentiation
-            expression = expression.replace('^', '**')
-            result = eval(expression)
-            return f"Calculation result: {expression.replace('**', '^')} = {result}"
+            python_expression = expression.replace('^', '**')
+            result = eval(python_expression)
+            
+            # Format result nicely - avoid LaTeX conflicts
+            return f"Calculation result: {original_expression} = {result}"
         except Exception as e:
             return f"Error: {str(e)}"
     
@@ -680,6 +708,88 @@ Be thorough and use multiple tools when helpful."""
         except Exception as e:
             st.error(f"Error: {str(e)}")
     
+    # Structured ReAct Summary
+    st.markdown("---")
+    st.markdown("### 🏗️ Structured ReAct Analysis")
+    st.markdown("Get organized insights from the ReAct agent's reasoning process.")
+    
+    analysis_prompt = st.text_area(
+        "Task to analyze:", 
+        value="Plan a weekend trip to Tokyo, including weather check, budget calculation, and itinerary suggestions.",
+        height=80
+    )
+    
+    if st.button("📊 Get Structured Analysis", type="secondary"):
+        try:
+            with st.spinner("🔄 Analyzing task structure..."):
+                # First, get task analysis
+                task_analysis_response = client.beta.chat.completions.parse(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a task analysis expert. Analyze the complexity and requirements of tasks."},
+                        {"role": "user", "content": f"Analyze this task: {analysis_prompt}"}
+                    ],
+                    response_format=TaskAnalysis
+                )
+                
+                task_data = task_analysis_response.choices[0].message.parsed
+                
+                st.markdown("### 📋 Task Analysis:")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**🎯 Task Complexity:**")
+                    complexity_color = {"simple": "🟢", "moderate": "🟡", "complex": "🔴"}
+                    st.info(f"{complexity_color.get(task_data.task_complexity, '⚪')} {task_data.task_complexity.title()}")
+                    
+                    st.markdown("**🔧 Required Tools:**")
+                    for tool in task_data.required_tools:
+                        st.success(f"• {tool}")
+                    
+                    st.markdown("**📊 Estimated Steps:**")
+                    st.metric("Steps", task_data.estimated_steps)
+                
+                with col2:
+                    st.markdown("**🎯 Approach Strategy:**")
+                    st.text_area("", value=task_data.approach_strategy, height=200, disabled=True)
+                
+                # Now simulate a structured ReAct summary
+                st.markdown("### 🧠 Simulated ReAct Summary:")
+                st.info("This shows how a completed ReAct session would be structured:")
+                
+                # Create a mock structured summary
+                mock_summary = ReActSummary(
+                    total_steps=task_data.estimated_steps,
+                    tools_used=task_data.required_tools,
+                    final_answer=f"Successfully analyzed the task: {analysis_prompt[:100]}...",
+                    key_insights=[
+                        f"Task complexity: {task_data.task_complexity}",
+                        f"Requires {len(task_data.required_tools)} different tools",
+                        f"Estimated to complete in {task_data.estimated_steps} steps"
+                    ],
+                    reasoning_chain=task_data.approach_strategy
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**📊 Execution Metrics:**")
+                    st.metric("Total Steps", mock_summary.total_steps)
+                    st.metric("Tools Used", len(mock_summary.tools_used))
+                    
+                    st.markdown("**🔍 Key Insights:**")
+                    for insight in mock_summary.key_insights:
+                        st.success(f"• {insight}")
+                
+                with col2:
+                    st.markdown("**🧠 Reasoning Chain:**")
+                    st.text_area("", value=mock_summary.reasoning_chain, height=150, disabled=True)
+                    
+                    st.markdown("**🎯 Final Answer:**")
+                    st.text_area("", value=mock_summary.final_answer, height=100, disabled=True)
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+    
     # Code example
     st.markdown("---")
     st.markdown("### 👨‍💻 Want to see the ReAct code?")
@@ -688,8 +798,24 @@ Be thorough and use multiple tools when helpful."""
         st.code("""
 import openai
 import json
+from pydantic import BaseModel
+from typing import List
 
-def react_agent(client, user_request, tools, available_functions, max_iterations=5):
+# Pydantic models for structured outputs
+class ReActSummary(BaseModel):
+    total_steps: int
+    tools_used: List[str]
+    final_answer: str
+    key_insights: List[str]
+    reasoning_chain: str
+
+class TaskAnalysis(BaseModel):
+    task_complexity: str  # "simple", "moderate", "complex"
+    required_tools: List[str]
+    estimated_steps: int
+    approach_strategy: str
+
+def react_agent_with_structured_output(client, user_request, tools, available_functions, max_iterations=5):
     messages = [
         {
             "role": "system", 
@@ -697,6 +823,9 @@ def react_agent(client, user_request, tools, available_functions, max_iterations
         },
         {"role": "user", "content": user_request}
     ]
+    
+    execution_steps = []
+    tools_used = set()
     
     for iteration in range(max_iterations):
         print(f"\\n--- Iteration {iteration + 1} ---")
@@ -712,6 +841,13 @@ def react_agent(client, user_request, tools, available_functions, max_iterations
         response_message = response.choices[0].message
         messages.append(response_message.model_dump())
         
+        # Track execution
+        step_info = {
+            "iteration": iteration + 1,
+            "thinking": response_message.content,
+            "tools_called": []
+        }
+        
         # Show thinking
         if response_message.content:
             print(f"Agent thinks: {response_message.content}")
@@ -725,6 +861,8 @@ def react_agent(client, user_request, tools, available_functions, max_iterations
                 function_args = json.loads(tool_call.function.arguments)
                 
                 print(f"Using {function_name} with {function_args}")
+                tools_used.add(function_name)
+                step_info["tools_called"].append(function_name)
                 
                 # Execute function
                 result = available_functions[function_name](**function_args)
@@ -738,14 +876,63 @@ def react_agent(client, user_request, tools, available_functions, max_iterations
                     "content": result,
                 })
         else:
-            # No more tools needed, agent is done
-            print("Agent completed the task!")
-            break
+            # No more tools needed, get structured summary
+            structured_response = client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=messages + [
+                    {"role": "user", "content": "Provide a structured summary of this ReAct session."}
+                ],
+                response_format=ReActSummary
+            )
+            
+            summary = structured_response.choices[0].message.parsed
+            
+            print("\\n=== STRUCTURED SUMMARY ===")
+            print(f"Total Steps: {summary.total_steps}")
+            print(f"Tools Used: {', '.join(summary.tools_used)}")
+            print(f"Final Answer: {summary.final_answer}")
+            print("Key Insights:")
+            for insight in summary.key_insights:
+                print(f"  • {insight}")
+            
+            return summary
+        
+        execution_steps.append(step_info)
     
-    return messages
+    return execution_steps
+
+# Usage with task analysis
+def analyze_and_execute_task(client, task, tools, available_functions):
+    # First, analyze the task
+    task_analysis = client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Analyze task complexity and requirements."},
+            {"role": "user", "content": f"Analyze this task: {task}"}
+        ],
+        response_format=TaskAnalysis
+    )
+    
+    analysis = task_analysis.choices[0].message.parsed
+    print(f"Task Complexity: {analysis.task_complexity}")
+    print(f"Required Tools: {', '.join(analysis.required_tools)}")
+    print(f"Estimated Steps: {analysis.estimated_steps}")
+    
+    # Then execute with ReAct
+    result = react_agent_with_structured_output(
+        client, task, tools, available_functions, 
+        max_iterations=analysis.estimated_steps
+    )
+    
+    return analysis, result
 
 # Usage
-result = react_agent(client, "Plan a trip to Tokyo", tools, available_functions)
+analysis, summary = analyze_and_execute_task(
+    client, 
+    "Plan a trip to Tokyo with weather and budget", 
+    tools, 
+    available_functions
+)
         """, language="python")
     
     st.markdown("### 🌐 Adding Exa AI to ReAct Agents")
