@@ -133,7 +133,11 @@ pages = {
     "🔧 LLM + Tool Call": "tool_call", 
     "🔄 ReAct Agent": "react_agent",
     "🤝 Multi-Agent Workflow": "multi_agent",
-    "⚖️ ReAct vs Multi-Agent": "comparison"
+    "⚖️ ReAct vs Multi-Agent": "comparison",
+    "🔌 What is MCP?": "mcp_intro",
+    "🛠️ Simple MCP Example": "mcp_example",
+    "⚡ Exa API vs MCP": "exa_comparison",
+    "🌐 Remote vs Local MCPs": "remote_mcp_comparison"
 }
 
 # Get the selected page from query params or default to home
@@ -160,18 +164,26 @@ if st.session_state.page == "home":
         2. **LLM + Tool Call** - AI with external tools
         3. **ReAct Agent** - AI that thinks and acts
         4. **Multi-Agent** - Multiple AIs collaborating
+        
+        **🔌 MCP Deep Dive:**
+        5. **What is MCP?** - Introduction to Model Context Protocol
+        6. **Simple MCP Example** - Build your first MCP server
+        7. **Exa API vs MCP** - Why MCPs are better than APIs
+        8. **Remote vs Local MCPs** - Deployment options and protocols
         """)
         
     with col2:
-        st.markdown("### 🧠 Concepts")
+        st.markdown("### 🧠 Key Concepts")
         st.markdown("""
-        **MCP**: Connect AI to external tools and data
+        **MCP**: Universal standard for connecting AI to external tools and data
         
-        **Agents**: AI that can plan and take actions
+        **Agents**: AI that can plan and take actions autonomously
         
-        **ReAct**: Reasoning + Acting in loops
+        **ReAct**: Reasoning + Acting in iterative loops
         
-        **Multi-Agent**: Specialized AIs working together
+        **Multi-Agent**: Specialized AIs working together on complex tasks
+        
+        **Tools vs Resources**: Actions vs Data in the MCP framework
         """)
     
     st.markdown("---")
@@ -195,4 +207,16 @@ elif st.session_state.page == "react_agent":
 elif st.session_state.page == "multi_agent":
     exec(open("apps/pages/multi_agent.py").read())
 elif st.session_state.page == "comparison":
-    exec(open("apps/pages/comparison.py").read()) 
+    exec(open("apps/pages/comparison.py").read())
+elif st.session_state.page == "mcp_intro":
+    from pages import mcp_intro
+    mcp_intro.show()
+elif st.session_state.page == "mcp_example":
+    from pages import mcp_example
+    mcp_example.show()
+elif st.session_state.page == "exa_comparison":
+    from pages import exa_comparison
+    exa_comparison.show()
+elif st.session_state.page == "remote_mcp_comparison":
+    from pages import remote_mcp_comparison
+    remote_mcp_comparison.show() 
