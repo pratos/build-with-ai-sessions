@@ -5,6 +5,22 @@ from datetime import datetime
 import os
 import concurrent.futures
 
+# Cost tracking for multi-agent workflows
+def estimate_tokens(text):
+    """Rough token estimation (1 token ≈ 4 characters)"""
+    return len(str(text)) // 4
+
+def calculate_agent_cost(messages_count, avg_message_length):
+    """Estimate cost for multi-agent workflow"""
+    # Rough estimation for gpt-4o-mini
+    input_cost_per_token = 0.00015 / 1000
+    output_cost_per_token = 0.0006 / 1000
+    
+    estimated_tokens = messages_count * estimate_tokens("x" * avg_message_length)
+    estimated_cost = estimated_tokens * (input_cost_per_token + output_cost_per_token)
+    
+    return f"${estimated_cost:.6f} (≈{estimated_tokens} tokens)"
+
 # Check if exa_py is available
 try:
     import exa_py
@@ -62,10 +78,39 @@ if api_key:
     # Set the API key for the agents SDK
     os.environ["OPENAI_API_KEY"] = api_key
     
-    # Define tools that agents can use
+    # Get EXA API key from session state
+    exa_api_key = st.session_state.get("exa_api_key")
+    
+    # Tool selection toggle
+    st.markdown("### 🔧 Tool Configuration")
+    use_exa = st.toggle(
+        "Use Exa AI Tools (Real-time research)", 
+        value=True,  # Default to True for multi-agent since it's more powerful
+        help="Toggle between mock tools and real Exa AI tools for research",
+        disabled=not (EXA_AVAILABLE and exa_api_key)
+    )
+    
+    if use_exa and EXA_AVAILABLE and exa_api_key:
+        os.environ["EXA_API_KEY"] = exa_api_key
+        st.success("✅ **Exa Tools Enabled**: Real-time web search, company research, academic papers, and more!")
+        tool_mode = "exa"
+    else:
+        if use_exa and not EXA_AVAILABLE:
+            st.warning("📦 **Install Exa**: Run `pip install exa-py` to enable Exa tools")
+        elif use_exa and not exa_api_key:
+            st.warning("🔑 **EXA API Key Required**: Add your EXA API key in the sidebar")
+        st.info("🔧 **Mock Tools Active**: Using demonstration tools with sample data")
+        tool_mode = "mock"
+    
+    # Define tools that agents can use based on mode
+    if tool_mode == "exa":
+        # Real Exa tools (existing functions)
+        pass  # The exa functions are already defined above
+    
+    # Mock tools for fallback
     @function_tool
     def search_information(query: str) -> str:
-        """Search for information on any topic"""
+        """Search for information on any topic (mock data)"""
         search_results = {
             "climate change": "Climate change refers to long-term shifts in global temperatures and weather patterns. Human activities, particularly burning fossil fuels, are the main driver.",
             "artificial intelligence": "AI is the simulation of human intelligence in machines. It includes machine learning, deep learning, and natural language processing.",
@@ -77,9 +122,34 @@ if api_key:
         
         for key, result in search_results.items():
             if key.lower() in query.lower():
-                return f"Research findings on '{query}': {result}"
+                return f"📖 Mock research findings on '{query}': {result}"
         
-        return f"General information found about '{query}': This is an interesting topic with various applications and implications."
+        return f"📖 Mock general information about '{query}': This is an interesting topic with various applications and implications."
+    
+    @function_tool
+    def mock_exa_web_search(query: str) -> str:
+        """Mock web search function"""
+        return f"🔍 Mock web search results for '{query}': Found sample information about this topic from various sources. This is demonstration data."
+    
+    @function_tool
+    def mock_exa_company_research(company_name: str) -> str:
+        """Mock company research function"""
+        return f"🏢 Mock company research for '{company_name}': Sample business information, revenue data, and market analysis. This is demonstration data."
+    
+    @function_tool
+    def mock_exa_arxiv_search(topic: str) -> str:
+        """Mock arXiv search function"""
+        return f"📚 Mock arXiv papers on '{topic}': Found sample academic papers and research abstracts related to this topic. This is demonstration data."
+    
+    @function_tool
+    def mock_exa_twitter_search(topic: str) -> str:
+        """Mock Twitter search function"""
+        return f"🐦 Mock Twitter discussions on '{topic}': Sample social media conversations and expert opinions about this topic. This is demonstration data."
+    
+    @function_tool
+    def mock_exa_paperswithcode_search(topic: str) -> str:
+        """Mock Papers with Code search function"""
+        return f"💻 Mock Papers with Code for '{topic}': Sample implementations, benchmarks, and code repositories related to this topic. This is demonstration data."
     
     @function_tool
     def exa_web_search(query: str) -> str:
@@ -96,18 +166,22 @@ if api_key:
             results = exa.search(
                 query=query,
                 num_results=3,
-                text=True,
-                highlights=True
+                use_autoprompt=True
             )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
             
             search_summary = f"Exa web search results for '{query}':\n\n"
             for i, result in enumerate(results.results, 1):
                 search_summary += f"{i}. **{result.title}**\n"
                 search_summary += f"   URL: {result.url}\n"
-                if hasattr(result, 'highlights') and result.highlights:
-                    search_summary += f"   Key info: {result.highlights[0][:200]}...\n"
-                elif hasattr(result, 'text') and result.text:
-                    search_summary += f"   Summary: {result.text[:200]}...\n"
+                if result.id in content_map and content_map[result.id]:
+                    search_summary += f"   Summary: {content_map[result.id][:200]}...\n"
                 search_summary += "\n"
             
             return search_summary
@@ -130,16 +204,22 @@ if api_key:
             results = exa.search(
                 query=f"{company_name} company business model revenue",
                 num_results=3,
-                text=True,
-                category="company"
+                use_autoprompt=True
             )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
             
             research_summary = f"Exa company research for '{company_name}':\n\n"
             for i, result in enumerate(results.results, 1):
                 research_summary += f"{i}. **{result.title}**\n"
                 research_summary += f"   Source: {result.url}\n"
-                if hasattr(result, 'text') and result.text:
-                    research_summary += f"   Info: {result.text[:300]}...\n"
+                if result.id in content_map and content_map[result.id]:
+                    research_summary += f"   Info: {content_map[result.id][:300]}...\n"
                 research_summary += "\n"
             
             return research_summary
@@ -162,16 +242,23 @@ if api_key:
             results = exa.search(
                 query=f"{topic} site:arxiv.org",
                 num_results=5,
-                text=True,
+                use_autoprompt=True,
                 include_domains=["arxiv.org"]
             )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
             
             papers_summary = f"Latest arXiv papers on '{topic}':\n\n"
             for i, result in enumerate(results.results, 1):
                 papers_summary += f"{i}. **{result.title}**\n"
                 papers_summary += f"   arXiv URL: {result.url}\n"
-                if hasattr(result, 'text') and result.text:
-                    papers_summary += f"   Abstract: {result.text[:250]}...\n"
+                if result.id in content_map and content_map[result.id]:
+                    papers_summary += f"   Abstract: {content_map[result.id][:250]}...\n"
                 papers_summary += "\n"
             
             return papers_summary
@@ -194,16 +281,23 @@ if api_key:
             results = exa.search(
                 query=f"{topic} site:twitter.com OR site:x.com",
                 num_results=5,
-                text=True,
+                use_autoprompt=True,
                 include_domains=["twitter.com", "x.com"]
             )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
             
             twitter_summary = f"Latest Twitter discussions on '{topic}':\n\n"
             for i, result in enumerate(results.results, 1):
                 twitter_summary += f"{i}. **{result.title}**\n"
                 twitter_summary += f"   Tweet URL: {result.url}\n"
-                if hasattr(result, 'text') and result.text:
-                    twitter_summary += f"   Content: {result.text[:200]}...\n"
+                if result.id in content_map and content_map[result.id]:
+                    twitter_summary += f"   Content: {content_map[result.id][:200]}...\n"
                 twitter_summary += "\n"
             
             return twitter_summary
@@ -226,16 +320,23 @@ if api_key:
             results = exa.search(
                 query=f"{topic} site:paperswithcode.com",
                 num_results=5,
-                text=True,
+                use_autoprompt=True,
                 include_domains=["paperswithcode.com"]
             )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
             
             pwc_summary = f"Latest Papers with Code on '{topic}':\n\n"
             for i, result in enumerate(results.results, 1):
                 pwc_summary += f"{i}. **{result.title}**\n"
                 pwc_summary += f"   PwC URL: {result.url}\n"
-                if hasattr(result, 'text') and result.text:
-                    pwc_summary += f"   Details: {result.text[:250]}...\n"
+                if result.id in content_map and content_map[result.id]:
+                    pwc_summary += f"   Details: {content_map[result.id][:250]}...\n"
                 pwc_summary += "\n"
             
             return pwc_summary
@@ -274,68 +375,129 @@ if api_key:
         
         return f"Market data for {topic}: Steady growth with emerging opportunities in digital transformation."
     
-    # Create specialized agents
-    research_agent = Agent(
-        name="Research Specialist",
-        instructions="""You are a research specialist. Your job is to:
-        1. Find comprehensive information on any topic
-        2. Gather relevant data and facts
-        3. Provide detailed research findings
-        4. Hand off to Analysis Agent when research is complete
+    # Create specialized agents based on tool mode
+    if tool_mode == "exa":
+        # Real Exa-powered agents
+        research_agent = Agent(
+            name="Research Specialist",
+            instructions="""You are a research specialist. Your job is to:
+            1. Find comprehensive information on any topic
+            2. Gather relevant data and facts
+            3. Provide detailed research findings
+            4. Hand off to Analysis Agent when research is complete
+            
+            Always be thorough and factual in your research.""",
+            tools=[search_information, get_market_data]
+        )
         
-        Always be thorough and factual in your research.""",
-        tools=[search_information, get_market_data]
-    )
-    
-    exa_agent = Agent(
-        name="Exa Web Analyst",
-        instructions="""You are an Exa-powered web research and analysis specialist. Your job is to:
-        1. Perform real-time web searches using Exa AI
-        2. Research companies and market trends
-        3. Analyze current web information and news
-        4. Provide up-to-date insights from the web
-        5. Hand off to other agents when web research is complete
+        exa_agent = Agent(
+            name="Exa Web Analyst",
+            instructions="""You are an Exa-powered web research and analysis specialist. Your job is to:
+            1. Perform real-time web searches using Exa AI
+            2. Research companies and market trends
+            3. Analyze current web information and news
+            4. Provide up-to-date insights from the web
+            5. Hand off to other agents when web research is complete
+            
+            Always use real-time web data when available and provide current, accurate information.""",
+            tools=[exa_web_search, exa_company_research]
+        )
         
-        Always use real-time web data when available and provide current, accurate information.""",
-        tools=[exa_web_search, exa_company_research]
-    )
-    
-    # Specialized research agents for parallel processing
-    arxiv_agent = Agent(
-        name="arXiv Research Specialist",
-        instructions="""You are an arXiv research specialist. Your job is to:
-        1. Search for the latest academic papers on arXiv
-        2. Find cutting-edge research and preprints
-        3. Summarize paper abstracts and key findings
-        4. Identify trending research topics and methodologies
+        # Specialized research agents for parallel processing
+        arxiv_agent = Agent(
+            name="arXiv Research Specialist",
+            instructions="""You are an arXiv research specialist. Your job is to:
+            1. Search for the latest academic papers on arXiv
+            2. Find cutting-edge research and preprints
+            3. Summarize paper abstracts and key findings
+            4. Identify trending research topics and methodologies
+            
+            Focus on recent, high-quality academic work and emerging research trends.""",
+            tools=[exa_arxiv_search]
+        )
         
-        Focus on recent, high-quality academic work and emerging research trends.""",
-        tools=[exa_arxiv_search]
-    )
-    
-    twitter_agent = Agent(
-        name="Twitter Research Specialist", 
-        instructions="""You are a Twitter research specialist. Your job is to:
-        1. Search for latest discussions and trends on Twitter/X
-        2. Find expert opinions and community discussions
-        3. Identify viral content and emerging conversations
-        4. Track real-time sentiment and public opinion
+        twitter_agent = Agent(
+            name="Twitter Research Specialist", 
+            instructions="""You are a Twitter research specialist. Your job is to:
+            1. Search for latest discussions and trends on Twitter/X
+            2. Find expert opinions and community discussions
+            3. Identify viral content and emerging conversations
+            4. Track real-time sentiment and public opinion
+            
+            Focus on current discussions, expert takes, and community insights.""",
+            tools=[exa_twitter_search]
+        )
         
-        Focus on current discussions, expert takes, and community insights.""",
-        tools=[exa_twitter_search]
-    )
-    
-    paperswithcode_agent = Agent(
-        name="Papers with Code Specialist",
-        instructions="""You are a Papers with Code research specialist. Your job is to:
-        1. Search for latest papers with code implementations
-        2. Find state-of-the-art models and benchmarks
-        3. Identify reproducible research and open-source implementations
-        4. Track performance improvements and new datasets
+        paperswithcode_agent = Agent(
+            name="Papers with Code Specialist",
+            instructions="""You are a Papers with Code research specialist. Your job is to:
+            1. Search for latest papers with code implementations
+            2. Find state-of-the-art models and benchmarks
+            3. Identify reproducible research and open-source implementations
+            4. Track performance improvements and new datasets
+            
+            Focus on practical, implementable research with code availability.""",
+            tools=[exa_paperswithcode_search]
+        )
+    else:
+        # Mock agents for demonstration
+        research_agent = Agent(
+            name="Research Specialist (Mock)",
+            instructions="""You are a research specialist using demonstration data. Your job is to:
+            1. Find sample information on any topic
+            2. Provide mock research findings for educational purposes
+            3. Demonstrate research workflows
+            4. Hand off to Analysis Agent when research is complete
+            
+            Note: You are using mock data for demonstration purposes.""",
+            tools=[search_information, get_market_data]
+        )
         
-        Focus on practical, implementable research with code availability.""",
-        tools=[exa_paperswithcode_search]
-    )
+        exa_agent = Agent(
+            name="Mock Web Analyst",
+            instructions="""You are a mock web research analyst for demonstration. Your job is to:
+            1. Provide sample web search results
+            2. Demonstrate company research workflows
+            3. Show how web analysis would work
+            4. Use mock data for educational purposes
+            
+            Note: You are using demonstration data, not real-time information.""",
+            tools=[mock_exa_web_search, mock_exa_company_research]
+        )
+        
+        # Mock specialized research agents
+        arxiv_agent = Agent(
+            name="Mock arXiv Specialist",
+            instructions="""You are a mock arXiv research specialist for demonstration. Your job is to:
+            1. Provide sample academic paper information
+            2. Demonstrate research paper analysis
+            3. Show how academic research workflows would work
+            
+            Note: You are using demonstration data, not real arXiv papers.""",
+            tools=[mock_exa_arxiv_search]
+        )
+        
+        twitter_agent = Agent(
+            name="Mock Twitter Specialist", 
+            instructions="""You are a mock Twitter research specialist for demonstration. Your job is to:
+            1. Provide sample social media discussion data
+            2. Demonstrate social sentiment analysis
+            3. Show how social media research would work
+            
+            Note: You are using demonstration data, not real Twitter discussions.""",
+            tools=[mock_exa_twitter_search]
+        )
+        
+        paperswithcode_agent = Agent(
+            name="Mock Papers with Code Specialist",
+            instructions="""You are a mock Papers with Code specialist for demonstration. Your job is to:
+            1. Provide sample implementation information
+            2. Demonstrate code repository research
+            3. Show how implementation research would work
+            
+            Note: You are using demonstration data, not real Papers with Code information.""",
+            tools=[mock_exa_paperswithcode_search]
+        )
     
     analysis_agent = Agent(
         name="Data Analyst", 
@@ -425,41 +587,52 @@ if api_key:
         handoffs=[research_agent, exa_agent, parallel_research_coordinator, analysis_agent, writing_agent, creative_agent, thinking_agent]
     )
     
-    st.markdown("### 👥 Meet Your Agent Team")
+    st.markdown(f"### 👥 Meet Your Agent Team ({tool_mode.upper()} Mode)")
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.info("🔍 **Research Specialist**\nGeneral information")
-        st.info("🌐 **Exa Web Analyst**\nReal-time web search")
-        st.info("🧠 **Parallel Coordinator**\nManages parallel research")
+    if tool_mode == "exa":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("🔍 **Research Specialist**\nGeneral information")
+            st.info("🌐 **Exa Web Analyst**\nReal-time web search")
+            st.info("🧠 **Parallel Coordinator**\nManages parallel research")
+        
+        with col2:
+            st.info("📚 **arXiv Specialist**\nLatest academic papers")
+            st.info("🐦 **Twitter Specialist**\nSocial discussions")
+            st.info("💻 **Papers with Code**\nImplementations & benchmarks")
+        
+        with col3:
+            st.info("🤔 **Strategic Thinking**\nDeep analysis & synthesis")
+            st.info("📊 **Data Analyst**\nInsights from data")
+            st.info("✍️ **Content Writer**\nPolished content")
+        
+        st.success("🤝 **Project Coordinator** - Manages the full team and coordinates handoffs")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("🔍 **Research Specialist (Mock)**\nSample information")
+            st.info("🌐 **Mock Web Analyst**\nDemo web search")
+            st.info("🧠 **Parallel Coordinator**\nManages demo research")
+        
+        with col2:
+            st.info("📚 **Mock arXiv Specialist**\nSample academic papers")
+            st.info("🐦 **Mock Twitter Specialist**\nDemo social discussions")
+            st.info("💻 **Mock Papers with Code**\nSample implementations")
+        
+        with col3:
+            st.info("🤔 **Strategic Thinking**\nDeep analysis & synthesis")
+            st.info("📊 **Data Analyst**\nInsights from data")
+            st.info("✍️ **Content Writer**\nPolished content")
+        
+        st.warning("🤝 **Project Coordinator** - Using demonstration data for educational purposes")
     
-    with col2:
-        st.info("📚 **arXiv Specialist**\nLatest academic papers")
-        st.info("🐦 **Twitter Specialist**\nSocial discussions")
-        st.info("💻 **Papers with Code**\nImplementations & benchmarks")
-    
-    with col3:
-        st.info("🤔 **Strategic Thinking**\nDeep analysis & synthesis")
-        st.info("📊 **Data Analyst**\nInsights from data")
-        st.info("✍️ **Content Writer**\nPolished content")
-    
-    st.success("🤝 **Project Coordinator** - Manages the full team and coordinates handoffs")
-    
-    # Exa setup info and explanation
-    st.markdown("### 🌐 Exa AI Integration")
-    
-    exa_api_key = st.session_state.get("exa_api_key")
-    
-    if EXA_AVAILABLE and exa_api_key:
-        os.environ["EXA_API_KEY"] = exa_api_key
-        st.success("✅ **Exa AI Enabled**: Real-time web search and research capabilities active!")
-        st.info("🔍 **Exa Tools Available**: Web search, company research, arXiv papers, Twitter discussions, Papers with Code")
-    elif not EXA_AVAILABLE:
-        st.warning("📦 **Install Exa**: Run `pip install exa-py` to enable real-time web search")
-        st.info("🔧 **Fallback Mode**: Using mock data for demonstration")
-    elif not exa_api_key:
-        st.warning("🔑 **Add EXA API Key**: Enter your Exa API key in the sidebar for real-time search")
-        st.info("🔧 **Fallback Mode**: Using mock data for demonstration")
+    # Tool mode explanation
+    if tool_mode == "exa":
+        st.markdown("### 🌐 Exa AI Integration Active")
+        st.info("🔍 **Real Tools**: Web search, company research, arXiv papers, Twitter discussions, Papers with Code")
+    else:
+        st.markdown("### 🔧 Mock Mode Active")
+        st.info("📖 **Demo Tools**: Using sample data to demonstrate multi-agent workflows")
     
     with st.expander("🤔 What is Exa AI?"):
         st.markdown("""
@@ -482,9 +655,17 @@ if api_key:
     
     st.markdown("### 🚀 Try Multi-Agent Collaboration")
     
+    if tool_mode == "exa":
+        default_request = "Research the latest developments in large language models across arXiv papers, Twitter discussions, and Papers with Code implementations. Provide a comprehensive analysis with strategic insights."
+        placeholder_text = "Enter your research request for real-time multi-agent analysis..."
+    else:
+        default_request = "Research artificial intelligence and machine learning trends. Provide analysis with insights from multiple perspectives."
+        placeholder_text = "Enter your request for multi-agent demonstration..."
+    
     user_request = st.text_area(
         "What would you like the agent team to work on?",
-        value="Research the latest developments in large language models across arXiv papers, Twitter discussions, and Papers with Code implementations. Provide a comprehensive analysis with strategic insights.",
+        value=default_request,
+        placeholder=placeholder_text,
         height=120
     )
     
@@ -533,6 +714,9 @@ if api_key:
                             "action": "Starting agent collaboration",
                             "status": "in_progress",
                             "details": "Coordinator analyzing request and delegating to appropriate agents",
+                            "tools_used": [],
+                            "cost": "Not available",
+                            "raw_output": None,
                             "error": None
                         })
                         
@@ -545,6 +729,9 @@ if api_key:
                             "action": "Workflow completed successfully",
                             "status": "success",
                             "details": f"Final output length: {len(result.final_output)} characters",
+                            "tools_used": ["Multi-agent coordination"],
+                            "cost": calculate_agent_cost(len(getattr(result, 'messages', [])), 200),
+                            "raw_output": result.final_output[:500] + "..." if len(result.final_output) > 500 else result.final_output,
                             "error": None
                         })
                         
@@ -601,7 +788,8 @@ if api_key:
                     
                     # Create expandable section for each log entry
                     timestamp_str = log_entry["timestamp"].strftime("%H:%M:%S.%f")[:-3]
-                    with st.expander(f"{status_icon} [{timestamp_str}] {log_entry['agent']}: {log_entry['action']}", expanded=False):
+                    tools_info = f" | Tools: {', '.join(log_entry.get('tools_used', []))}" if log_entry.get('tools_used') else ""
+                    with st.expander(f"{status_icon} [{timestamp_str}] {log_entry['agent']}: {log_entry['action']}{tools_info}", expanded=False):
                         
                         col1, col2 = st.columns(2)
                         with col1:
@@ -612,10 +800,20 @@ if api_key:
                         with col2:
                             st.markdown(f"**Action:** {log_entry['action']}")
                             st.markdown(f"**Timestamp:** {timestamp_str}")
+                            st.markdown(f"**Cost:** {log_entry.get('cost', 'Not available')}")
+                        
+                        if log_entry.get("tools_used"):
+                            st.markdown("**🔧 Tools Used:**")
+                            st.info(", ".join(log_entry["tools_used"]))
                         
                         if log_entry.get("details"):
                             st.markdown("**Details:**")
                             st.info(log_entry["details"])
+                        
+                        if log_entry.get("raw_output"):
+                            st.markdown("**🔍 Raw Output:**")
+                            with st.expander("Show Raw Output", expanded=False):
+                                st.code(log_entry["raw_output"], language="text")
                         
                         if log_entry.get("error"):
                             st.markdown("**Error:**")
@@ -642,8 +840,34 @@ if api_key:
                     if agent_steps:
                         for step in agent_steps:
                             with st.expander(f"🤖 Step {step['step_number']}: {step['agent_name']}", expanded=False):
+                                # Show agent metadata
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.markdown(f"**Agent:** {step['agent_name']}")
+                                    st.markdown(f"**Step:** {step['step_number']}")
+                                with col2:
+                                    st.markdown(f"**Message Index:** {step['message_index']}")
+                                    st.markdown(f"**Cost:** Not available")
+                                
+                                st.markdown("**🔧 Tools Available:**")
+                                # Determine likely tools based on agent name
+                                if "Exa" in step['agent_name']:
+                                    st.info("🌐 Web search, Company research, arXiv papers, Twitter, Papers with Code")
+                                elif "Research" in step['agent_name']:
+                                    st.info("🔍 Information search, Market data")
+                                elif "Analysis" in step['agent_name'] or "Analyst" in step['agent_name']:
+                                    st.info("📊 Data analysis, Pattern recognition")
+                                elif "Coordinator" in step['agent_name']:
+                                    st.info("🤝 Agent handoffs, Task delegation")
+                                else:
+                                    st.info("📝 Content generation, Writing")
+                                
                                 st.markdown("**Agent Output:**")
                                 st.markdown(step['content'])
+                                
+                                # Show raw output
+                                with st.expander("🔍 Raw Agent Output", expanded=False):
+                                    st.code(step['content'], language="text")
                                 
                                 # Add some metadata
                                 st.markdown("---")
@@ -668,6 +892,40 @@ if api_key:
                     st.metric("Successful Steps", success_count)
                 with col4:
                     st.metric("Errors", error_count)
+                
+                # Cost summary
+                st.markdown("### 💰 Cost Summary")
+                total_tools = sum(len(log.get("tools_used", [])) for log in execution_log)
+                agents_used = set(log["agent"] for log in execution_log if log["agent"] != "System")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Agents Used", len(agents_used))
+                with col2:
+                    st.metric("Total Tool Calls", total_tools)
+                with col3:
+                    # Try to calculate total cost
+                    total_cost = 0
+                    cost_available = False
+                    for log in execution_log:
+                        if log.get("cost") and "$" in str(log["cost"]):
+                            try:
+                                cost_str = log["cost"].split("$")[1].split(" ")[0]
+                                total_cost += float(cost_str)
+                                cost_available = True
+                            except:
+                                pass
+                    
+                    if cost_available:
+                        st.metric("Estimated Cost", f"${total_cost:.6f}")
+                    else:
+                        st.metric("Estimated Cost", "Not available")
+                
+                # Show which agents were active
+                if agents_used:
+                    st.markdown("**🤖 Active Agents:**")
+                    agent_list = ", ".join(sorted(agents_used))
+                    st.info(agent_list)
                 
                 if error_count == 0:
                     st.balloons()
@@ -965,20 +1223,31 @@ print(result.final_output)
     st.markdown("---")
     st.markdown("### 🎮 Try These Multi-Agent Examples!")
     
-    example_requests = [
-        "Research the latest developments in diffusion models across arXiv, Twitter discussions, and Papers with Code. Provide strategic analysis on emerging trends and implementation opportunities.",
-        "Investigate current multimodal AI research from academic papers, social media expert opinions, and code repositories. Synthesize findings with deep analytical insights.",
-        "Study recent advances in reinforcement learning from human feedback (RLHF) across all research platforms. Generate strategic recommendations for practical applications.",
-        "Research emerging trends in computer vision and foundation models. Gather insights from papers, community discussions, and implementations for comprehensive analysis.",
-        "Explore the latest in AI safety and alignment research across academic and social platforms. Provide thoughtful analysis on current approaches and future directions."
-    ]
+    if tool_mode == "exa":
+        example_requests = [
+            "Research the latest developments in diffusion models across arXiv, Twitter discussions, and Papers with Code. Provide strategic analysis on emerging trends and implementation opportunities.",
+            "Investigate current multimodal AI research from academic papers, social media expert opinions, and code repositories. Synthesize findings with deep analytical insights.",
+            "Study recent advances in reinforcement learning from human feedback (RLHF) across all research platforms. Generate strategic recommendations for practical applications.",
+            "Research emerging trends in computer vision and foundation models. Gather insights from papers, community discussions, and implementations for comprehensive analysis.",
+            "Explore the latest in AI safety and alignment research across academic and social platforms. Provide thoughtful analysis on current approaches and future directions."
+        ]
+        flow_description = "**Agent flow:** Parallel Research (arXiv + Twitter + Papers with Code) → Strategic Thinking Analysis → Writing"
+    else:
+        example_requests = [
+            "Research artificial intelligence and machine learning trends. Provide analysis with insights from multiple perspectives.",
+            "Investigate renewable energy technologies and market opportunities. Analyze data from different research angles.",
+            "Study quantum computing developments and potential applications. Generate strategic recommendations.",
+            "Research biotechnology advances and their implications. Provide comprehensive analysis and insights.",
+            "Explore space exploration technologies and future missions. Analyze trends and opportunities."
+        ]
+        flow_description = "**Agent flow:** Mock Research → Mock Analysis → Writing (Demonstration Mode)"
     
     st.markdown("**These examples showcase different agents collaborating:**")
     
     for i, request in enumerate(example_requests):
         with st.expander(f"🎯 Example {i+1}: {request[:50]}..."):
             st.markdown(f"**Full request:** {request}")
-            st.markdown("**Agent flow:** Parallel Research (arXiv + Twitter + Papers with Code) → Strategic Thinking Analysis → Writing")
+            st.markdown(flow_description)
             if st.button("Try this example", key=f"multi_example_{i}"):
                 st.session_state.multi_example_request = request
                 st.rerun()

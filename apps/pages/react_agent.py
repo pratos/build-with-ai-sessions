@@ -5,6 +5,32 @@ import random
 from datetime import datetime
 import time
 
+# Cost tracking (approximate costs in USD)
+OPENAI_COSTS = {
+    "gpt-4o-mini": {
+        "input": 0.00015 / 1000,  # per token
+        "output": 0.0006 / 1000   # per token
+    }
+}
+
+def estimate_tokens(text):
+    """Rough token estimation (1 token ≈ 4 characters)"""
+    return len(text) // 4
+
+def calculate_cost(model, input_text, output_text):
+    """Calculate approximate cost for OpenAI API call"""
+    if model not in OPENAI_COSTS:
+        return "Not available"
+    
+    input_tokens = estimate_tokens(input_text)
+    output_tokens = estimate_tokens(output_text)
+    
+    input_cost = input_tokens * OPENAI_COSTS[model]["input"]
+    output_cost = output_tokens * OPENAI_COSTS[model]["output"]
+    total_cost = input_cost + output_cost
+    
+    return f"${total_cost:.6f} (≈{input_tokens + output_tokens} tokens)"
+
 st.markdown("# 🔄 ReAct Agent (LLM + Tools + Loop)")
 st.markdown("---")
 
@@ -25,11 +51,39 @@ AI that thinks in loops:
 💡 **Try Exa yourself**: [Exa Playground](https://dashboard.exa.ai/playground/search)
 """)
 
-# Check for API key from session state
+# Check for API keys from session state
 api_key = st.session_state.get("openai_api_key")
+exa_api_key = st.session_state.get("exa_api_key")
+
+# Check if exa_py is available
+try:
+    import exa_py
+    EXA_AVAILABLE = True
+except ImportError:
+    EXA_AVAILABLE = False
 
 if api_key:
     client = openai.Client(api_key=api_key)
+    
+    # Tool selection toggle
+    st.markdown("### 🔧 Tool Configuration")
+    use_exa = st.toggle(
+        "Use Exa AI Tools (Real-time web search)", 
+        value=False,
+        help="Toggle between mock tools and real Exa AI tools for web search",
+        disabled=not (EXA_AVAILABLE and exa_api_key)
+    )
+    
+    if use_exa and EXA_AVAILABLE and exa_api_key:
+        st.success("✅ **Exa Tools Enabled**: Real-time web search, company research, and more!")
+        tool_mode = "exa"
+    else:
+        if use_exa and not EXA_AVAILABLE:
+            st.warning("📦 **Install Exa**: Run `pip install exa-py` to enable Exa tools")
+        elif use_exa and not exa_api_key:
+            st.warning("🔑 **EXA API Key Required**: Add your EXA API key in the sidebar")
+        st.info("🔧 **Mock Tools Active**: Using demonstration tools with sample data")
+        tool_mode = "mock"
     
     # Enhanced tools for ReAct agent
     def search_web(query: str) -> str:
@@ -61,11 +115,15 @@ if api_key:
     def calculate(expression: str) -> str:
         """Perform calculations"""
         try:
-            allowed_chars = set('0123456789+-*/.()')
+            # Allow common mathematical characters including ^ for exponentiation
+            allowed_chars = set('0123456789+-*/.()^')
             if not all(c in allowed_chars or c.isspace() for c in expression):
                 return "Error: Invalid characters in expression"
+            
+            # Replace ^ with ** for Python exponentiation
+            expression = expression.replace('^', '**')
             result = eval(expression)
-            return f"Calculation result: {expression} = {result}"
+            return f"Calculation result: {expression.replace('**', '^')} = {result}"
         except Exception as e:
             return f"Error: {str(e)}"
     
@@ -73,90 +131,318 @@ if api_key:
         """Save a note (mock function)"""
         return f"✅ Note saved: '{content[:50]}...' at {datetime.now().strftime('%H:%M:%S')}"
     
-    # Tool definitions
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "search_web",
-                "description": "Search the web for information on any topic",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Search query"}
-                    },
-                    "required": ["query"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get current weather for a city",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "city": {"type": "string", "description": "City name"}
-                    },
-                    "required": ["city"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "calculate",
-                "description": "Perform mathematical calculations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "expression": {"type": "string", "description": "Math expression"}
-                    },
-                    "required": ["expression"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "save_note",
-                "description": "Save important information as a note",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "content": {"type": "string", "description": "Note content to save"}
-                    },
-                    "required": ["content"]
-                }
-            }
-        }
-    ]
+    # Real Exa AI tools
+    def exa_web_search(query: str) -> str:
+        """Real-time web search using Exa AI"""
+        if not (EXA_AVAILABLE and exa_api_key):
+            return "Exa search not available. Please enable Exa tools and ensure API key is set."
+        
+        try:
+            import os
+            os.environ["EXA_API_KEY"] = exa_api_key
+            exa = exa_py.Exa(api_key=exa_api_key)
+            
+            results = exa.search(
+                query=query,
+                num_results=3,
+                use_autoprompt=True
+            )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
+            
+            search_summary = f"🌐 Exa web search results for '{query}':\n\n"
+            for i, result in enumerate(results.results, 1):
+                search_summary += f"{i}. **{result.title}**\n"
+                search_summary += f"   URL: {result.url}\n"
+                if result.id in content_map and content_map[result.id]:
+                    search_summary += f"   Summary: {content_map[result.id][:200]}...\n"
+                search_summary += "\n"
+            
+            return search_summary
+            
+        except Exception as e:
+            return f"Exa search error: {str(e)}. Using fallback search instead."
     
-    available_functions = {
-        "search_web": search_web,
-        "get_weather": get_weather,
-        "calculate": calculate,
-        "save_note": save_note
-    }
+    def exa_company_research(company_name: str) -> str:
+        """Research companies using Exa AI"""
+        if not (EXA_AVAILABLE and exa_api_key):
+            return f"Exa company research not available for {company_name}."
+        
+        try:
+            import os
+            os.environ["EXA_API_KEY"] = exa_api_key
+            exa = exa_py.Exa(api_key=exa_api_key)
+            
+            results = exa.search(
+                query=f"{company_name} company business model revenue news",
+                num_results=3,
+                use_autoprompt=True
+            )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
+            
+            research_summary = f"🏢 Exa company research for '{company_name}':\n\n"
+            for i, result in enumerate(results.results, 1):
+                research_summary += f"{i}. **{result.title}**\n"
+                research_summary += f"   Source: {result.url}\n"
+                if result.id in content_map and content_map[result.id]:
+                    research_summary += f"   Info: {content_map[result.id][:300]}...\n"
+                research_summary += "\n"
+            
+            return research_summary
+            
+        except Exception as e:
+            return f"Exa company research error: {str(e)}."
+    
+    def exa_arxiv_search(topic: str) -> str:
+        """Search for latest papers on arXiv using Exa AI"""
+        if not (EXA_AVAILABLE and exa_api_key):
+            return f"Exa arXiv search not available for {topic}."
+        
+        try:
+            import os
+            os.environ["EXA_API_KEY"] = exa_api_key
+            exa = exa_py.Exa(api_key=exa_api_key)
+            
+            results = exa.search(
+                query=f"{topic} site:arxiv.org",
+                num_results=3,
+                use_autoprompt=True,
+                include_domains=["arxiv.org"]
+            )
+            
+            # Get content for the results
+            try:
+                contents = exa.get_contents([result.id for result in results.results])
+                content_map = {content.id: content.text for content in contents.contents if content.text}
+            except:
+                content_map = {}
+            
+            papers_summary = f"📚 Latest arXiv papers on '{topic}':\n\n"
+            for i, result in enumerate(results.results, 1):
+                papers_summary += f"{i}. **{result.title}**\n"
+                papers_summary += f"   arXiv URL: {result.url}\n"
+                if result.id in content_map and content_map[result.id]:
+                    papers_summary += f"   Abstract: {content_map[result.id][:250]}...\n"
+                papers_summary += "\n"
+            
+            return papers_summary
+            
+        except Exception as e:
+            return f"Exa arXiv search error: {str(e)}."
+    
+    # Tool definitions based on mode
+    if tool_mode == "exa":
+        # Exa AI tools
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "exa_web_search",
+                    "description": "Search the web for real-time information using Exa AI",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"}
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "exa_company_research",
+                    "description": "Research companies and their business models using Exa AI",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "company_name": {"type": "string", "description": "Company name to research"}
+                        },
+                        "required": ["company_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "exa_arxiv_search",
+                    "description": "Search for latest academic papers on arXiv using Exa AI",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {"type": "string", "description": "Research topic to search for"}
+                        },
+                        "required": ["topic"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather for a city",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string", "description": "City name"}
+                        },
+                        "required": ["city"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "calculate",
+                    "description": "Perform mathematical calculations",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "expression": {"type": "string", "description": "Math expression"}
+                        },
+                        "required": ["expression"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_note",
+                    "description": "Save important information as a note",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "Note content to save"}
+                        },
+                        "required": ["content"]
+                    }
+                }
+            }
+        ]
+        
+        available_functions = {
+            "exa_web_search": exa_web_search,
+            "exa_company_research": exa_company_research,
+            "exa_arxiv_search": exa_arxiv_search,
+            "get_weather": get_weather,
+            "calculate": calculate,
+            "save_note": save_note
+        }
+    else:
+        # Mock tools
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_web",
+                    "description": "Search the web for information on any topic (mock data)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"}
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather for a city",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string", "description": "City name"}
+                        },
+                        "required": ["city"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "calculate",
+                    "description": "Perform mathematical calculations",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "expression": {"type": "string", "description": "Math expression"}
+                        },
+                        "required": ["expression"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_note",
+                    "description": "Save important information as a note",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "Note content to save"}
+                        },
+                        "required": ["content"]
+                    }
+                }
+            }
+        ]
+        
+        available_functions = {
+            "search_web": search_web,
+            "get_weather": get_weather,
+            "calculate": calculate,
+            "save_note": save_note
+        }
     
     st.markdown("### 🛠️ Available Tools")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.info("🔍 **Web Search**\nSearch for information")
-    with col2:
-        st.info("🌤️ **Weather**\nGet weather data")
-    with col3:
-        st.info("🧮 **Calculator**\nDo math calculations")
-    with col4:
-        st.info("📝 **Notes**\nSave important info")
+    
+    if tool_mode == "exa":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("🌐 **Exa Web Search**\nReal-time web search")
+            st.info("🏢 **Company Research**\nBusiness intelligence")
+        with col2:
+            st.info("📚 **arXiv Search**\nLatest research papers")
+            st.info("🌤️ **Weather**\nCurrent conditions")
+        with col3:
+            st.info("🧮 **Calculator**\nMath calculations")
+            st.info("📝 **Notes**\nSave information")
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.info("🔍 **Web Search**\nMock search data")
+        with col2:
+            st.info("🌤️ **Weather**\nRandom weather data")
+        with col3:
+            st.info("🧮 **Calculator**\nReal math calculations")
+        with col4:
+            st.info("📝 **Notes**\nSave important info")
     
     st.markdown("### 🤖 Try the ReAct Agent")
     
+    # Different default prompts based on tool mode
+    if tool_mode == "exa":
+        default_prompt = "Research the latest developments in artificial intelligence, find recent news about OpenAI, search for academic papers on large language models, and calculate the potential market size if AI grows 25% annually from a $100B base."
+    else:
+        default_prompt = "I'm planning a trip to Tokyo next week. Help me research the city, check the weather, and calculate the budget if I spend $100 per day for 5 days."
+    
     user_prompt = st.text_area(
         "Give the agent a complex task:", 
-        value="I'm planning a trip to Tokyo next week. Help me research the city, check the weather, and calculate the budget if I spend $100 per day for 5 days.",
-        height=100
+        value=default_prompt,
+        height=120
     )
     
     max_iterations = st.slider("Maximum thinking iterations:", 1, 10, 5)
@@ -194,7 +480,9 @@ Be thorough and use multiple tools when helpful."""
                         "thinking": None,
                         "tool_calls": [],
                         "final_response": None,
-                        "error": None
+                        "error": None,
+                        "api_cost": None,
+                        "model_used": "gpt-4o-mini"
                     }
                     
                     try:
@@ -210,6 +498,11 @@ Be thorough and use multiple tools when helpful."""
                         response_message = response.choices[0].message
                         messages.append(response_message.model_dump())
                         
+                        # Calculate API cost
+                        input_text = " ".join([str(msg.get("content", "")) for msg in messages[:-1] if msg.get("content")])
+                        output_text = str(response_message.content or "")
+                        step_data["api_cost"] = calculate_cost("gpt-4o-mini", input_text, output_text)
+                        
                         # Store agent's reasoning
                         if response_message.content:
                             step_data["thinking"] = response_message.content
@@ -224,13 +517,16 @@ Be thorough and use multiple tools when helpful."""
                                     "name": function_name,
                                     "args": function_args,
                                     "result": None,
-                                    "error": None
+                                    "raw_output": None,
+                                    "error": None,
+                                    "cost": "Not available"  # Tool execution cost
                                 }
                                 
                                 try:
                                     # Execute tool
                                     function_response = available_functions[function_name](**function_args)
                                     tool_data["result"] = function_response
+                                    tool_data["raw_output"] = str(function_response)  # Store raw output
                                     
                                     # Add tool response to conversation
                                     messages.append({
@@ -295,6 +591,13 @@ Be thorough and use multiple tools when helpful."""
                     # Create expandable section for each step
                     with st.expander(f"{status_icon} Step {iteration_num}: {'ERROR' if step.get('error') else 'COMPLETE' if step.get('final_response') else 'TOOL USAGE' if step.get('tool_calls') else 'THINKING'}", expanded=False):
                         
+                        # Show step metadata
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**Model:** {step.get('model_used', 'gpt-4o-mini')}")
+                        with col2:
+                            st.markdown(f"**API Cost:** {step.get('api_cost', 'Not available')}")
+                        
                         # Show thinking
                         if step.get("thinking"):
                             st.markdown("**🤔 Agent's Thinking:**")
@@ -304,7 +607,7 @@ Be thorough and use multiple tools when helpful."""
                         if step.get("tool_calls"):
                             st.markdown("**🔧 Tools Used:**")
                             for i, tool_call in enumerate(step["tool_calls"]):
-                                st.markdown(f"**Tool {i+1}: `{tool_call['name']}`**")
+                                st.markdown(f"**Tool {i+1}: `{tool_call['name']}`** | Cost: {tool_call.get('cost', 'Not available')}")
                                 
                                 # Show arguments
                                 with st.expander(f"📝 Arguments for {tool_call['name']}", expanded=False):
@@ -315,6 +618,11 @@ Be thorough and use multiple tools when helpful."""
                                     st.error(f"❌ Tool Error: {tool_call['error']}")
                                 elif tool_call.get("result"):
                                     st.success(f"✅ Tool Result: {tool_call['result']}")
+                                    
+                                    # Show raw output in expandable section
+                                    if tool_call.get("raw_output"):
+                                        with st.expander(f"🔍 Raw Output from {tool_call['name']}", expanded=False):
+                                            st.code(tool_call["raw_output"], language="text")
                         
                         # Show final response
                         if step.get("final_response"):
@@ -337,6 +645,37 @@ Be thorough and use multiple tools when helpful."""
                     else:
                         st.markdown("### ⏸️ Task Incomplete")
                         st.warning("The agent reached the maximum number of iterations without completing the task.")
+                    
+                    # Show cost summary
+                    st.markdown("### 💰 Cost Summary")
+                    total_steps = len(execution_steps)
+                    api_calls = sum(1 for step in execution_steps if step.get("api_cost") and step["api_cost"] != "Not available")
+                    tool_calls = sum(len(step.get("tool_calls", [])) for step in execution_steps)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Steps", total_steps)
+                    with col2:
+                        st.metric("API Calls", api_calls)
+                    with col3:
+                        st.metric("Tool Calls", tool_calls)
+                    
+                    # Estimate total cost (rough)
+                    total_cost = 0
+                    cost_available = False
+                    for step in execution_steps:
+                        if step.get("api_cost") and "$" in str(step["api_cost"]):
+                            try:
+                                cost_str = step["api_cost"].split("$")[1].split(" ")[0]
+                                total_cost += float(cost_str)
+                                cost_available = True
+                            except:
+                                pass
+                    
+                    if cost_available:
+                        st.info(f"💵 **Estimated Total Cost:** ${total_cost:.6f}")
+                    else:
+                        st.info("💵 **Total Cost:** Not available")
                     
         except Exception as e:
             st.error(f"Error: {str(e)}")
@@ -530,12 +869,20 @@ result = react_agent(
     st.markdown("---")
     st.markdown("### 🎮 Try These Complex Examples!")
     
-    example_prompts = [
-        "I want to start learning Python programming. Research it, find the current weather in Silicon Valley (where many tech companies are), and calculate how many hours I need to study if I want to learn for 2 hours daily for 30 days.",
-        "Help me plan a dinner party for 8 people. Research cooking tips, check the weather for this weekend, calculate the budget if I spend $25 per person, and save the key information as notes.",
-        "I'm considering investing in tech stocks. Search for recent tech news, calculate what 10% of my $5000 savings would be, check the weather in New York (financial center), and save a summary.",
-        "Plan my morning routine: check today's weather, calculate how long I have if I wake up at 7 AM and need to leave by 9 AM, search for productivity tips, and save the plan."
-    ]
+    if tool_mode == "exa":
+        example_prompts = [
+            "Research Tesla's latest developments, find recent academic papers on electric vehicles, check the weather in Austin (Tesla's HQ), and calculate Tesla's potential revenue if they sell 3 million cars at $50k average.",
+            "Find the latest AI research papers, search for news about GPT models, research OpenAI as a company, and calculate the cost if I want to process 1 million tokens daily.",
+            "Research the latest developments in quantum computing, find academic papers on quantum algorithms, search for quantum computing companies, and save a summary of the key findings.",
+            "Search for recent climate change research, find papers on renewable energy, research companies like Tesla and Rivian, and calculate carbon savings if 10% of cars go electric."
+        ]
+    else:
+        example_prompts = [
+            "I want to start learning Python programming. Research it, find the current weather in Silicon Valley (where many tech companies are), and calculate how many hours I need to study if I want to learn for 2 hours daily for 30 days.",
+            "Help me plan a dinner party for 8 people. Research cooking tips, check the weather for this weekend, calculate the budget if I spend $25 per person, and save the key information as notes.",
+            "I'm considering investing in tech stocks. Search for recent tech news, calculate what 10% of my $5000 savings would be, check the weather in New York (financial center), and save a summary.",
+            "Plan my morning routine: check today's weather, calculate how long I have if I wake up at 7 AM and need to leave by 9 AM, search for productivity tips, and save the plan."
+        ]
     
     st.markdown("**These examples show how the agent thinks through complex, multi-step tasks:**")
     
