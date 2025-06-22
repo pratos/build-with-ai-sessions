@@ -1,7 +1,7 @@
 import streamlit as st
 
 def show():
-    st.title("🔌 Model Context Protocol (MCP)")
+    st.title("🔌 Model Context Protocol (MCP) Introduction")
     st.markdown("*The universal standard for connecting AI to external tools and data*")
     
     # Hero section with key concept

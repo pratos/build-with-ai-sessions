@@ -5,18 +5,20 @@ import json
 from openai import OpenAI
 
 def show():
-    st.title("🌐 Remote vs Local MCPs")
-    st.markdown("*Test and compare remote MCP servers using the OpenAI Agents SDK*")
+    st.title("🌐 Remote vs Local MCP Deployment")
+    st.markdown("*Compare deployment options and test remote MCP servers*")
     
     # Introduction
     st.markdown("""
-    ## 🎯 Understanding MCP Deployment Options
+    ## 🎯 MCP Deployment Strategies
+    Compare MCP server deployment options:
     
-    Model Context Protocol (MCP) servers can be deployed in different ways to suit various use cases:
+    🔹 **Local MCP (stdio)** - Direct process communication for development  
+    🔹 **Remote MCP (HTTP/WebSocket)** - Network-based servers for production  
+    🔹 **Interactive Testing** - Test remote MCP servers in the browser  
+    🔹 **Architecture Comparison** - Trade-offs between approaches  
     
-    - **Local MCP (stdio)**: Runs on your machine, accessed via stdin/stdout
-    - **Remote MCP (SSE/WebSocket)**: Runs on a server, accessed over network
-    - **Hybrid**: Local proxy to remote services
+    **Features:** Working implementations, deployment guides, testing interface.
     """)
     
     # Tabs for different sections

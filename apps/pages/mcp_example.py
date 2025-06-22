@@ -8,8 +8,21 @@ from openai import OpenAI
 load_dotenv()
 
 def show():
-    st.title("🛠️ Simple MCP Example")
-    st.markdown("*Build your first MCP server and use it with OpenAI Agents SDK*")
+    st.title("🛠️ Hands-on MCP Examples")
+    st.markdown("*Build and test real MCP servers with interactive examples*")
+    
+    # Introduction
+    st.markdown("""
+    ### 🎯 Learn MCP by Building
+    Hands-on MCP server examples:
+    
+    🔹 **Interactive Testing** - Test MCP tools directly in the browser  
+    🔹 **Real MCP Servers** - Complete implementations you can run  
+    🔹 **Multiple Examples** - File operations, calculations, weather, analytics  
+    🔹 **OpenAI Agents SDK** - Integration examples  
+    
+    **Features:** Copy-paste ready code, interactive demos, production examples.
+    """)
     
     # Example selection
     st.markdown("---")

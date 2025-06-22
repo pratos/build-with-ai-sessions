@@ -35,27 +35,20 @@ try:
 except ImportError:
     AGENTS_AVAILABLE = False
 
-st.markdown("# 🤝 Multi-Agent Workflow")
+st.markdown("# 🤝 Multi-Agent Orchestration")
 st.markdown("---")
 
 st.markdown("""
-### 🎯 Multi-Agent = Specialized AI Team
-Multiple expert AIs working together:
+### 🎯 Specialized AI Team Working Together
+Multiple expert AIs using OpenAI Agents SDK:
 
-- 🔍 **Research Agent**: General information
-- 🌐 **Exa Agent**: Real-time web search & analysis
-- 🧠 **Parallel Research Coordinator**: Manages academic research across platforms
-- 📚 **arXiv Specialist**: Latest academic papers
-- 🐦 **Twitter Specialist**: Social discussions & expert opinions  
-- 💻 **Papers with Code Specialist**: Implementations & benchmarks
-- 🤔 **Strategic Thinking Analyst**: Deep analysis & synthesis
-- 📊 **Analysis Agent**: Data insights
-- ✍️ **Writing Agent**: Content creation
-- 🎨 **Creative Agent**: Creative enhancement
+🔹 **Parallel Execution** - Multiple agents work simultaneously  
+🔹 **Agent Handoffs** - Task delegation between specialists  
+🔹 **Real-time Research** - Exa AI integration for web search, company analysis, academic papers  
+🔹 **Specialized Roles** - Research, Analysis, Writing, Creative, Strategic agents  
+🔹 **Workflow Coordination** - Intelligent task routing and result synthesis  
 
-They work in parallel and hand off tasks for comprehensive results.
-
-💡 **Try Exa yourself**: [Exa Playground](https://dashboard.exa.ai/playground/search)
+**⚡ Powered by OpenAI Agents SDK**: Official framework for production multi-agent systems.
 """)
 
 if not AGENTS_AVAILABLE:

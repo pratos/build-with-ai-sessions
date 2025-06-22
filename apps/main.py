@@ -99,6 +99,14 @@ else:
         help="Get your API key from https://exa.ai/",
         key="global_exa_key"
     )
+    
+    # Weather API Key (OpenWeatherMap)
+    weather_api_key = st.sidebar.text_input(
+        "Weather API Key (Optional):", 
+        type="password", 
+        help="Get your free API key from https://openweathermap.org/api",
+        key="global_weather_key"
+    )
 
 # Store API keys in session state for global access
 if api_key:
@@ -111,13 +119,24 @@ if exa_api_key:
 else:
     st.session_state.exa_api_key = None
 
+if weather_api_key:
+    st.session_state.weather_api_key = weather_api_key
+else:
+    st.session_state.weather_api_key = None
+
 # Status indicators for manual entry mode
 if key_mode == "Enter Manually":
     if api_key and exa_api_key:
-        st.sidebar.success("✅ All API Keys Set!")
+        st.sidebar.success("✅ Core API Keys Set!")
+        if weather_api_key:
+            st.sidebar.success("✅ Weather API Key Set!")
+        else:
+            st.sidebar.info("💡 Add Weather key for real weather data")
     elif api_key:
         st.sidebar.success("✅ OpenAI Key Set!")
         st.sidebar.info("💡 Add EXA key for enhanced multi-agent features")
+        if weather_api_key:
+            st.sidebar.info("✅ Weather API Key Set!")
     elif exa_api_key:
         st.sidebar.success("✅ EXA Key Set!")
         st.sidebar.info("💡 Add OpenAI key to use interactive features")
@@ -130,14 +149,14 @@ st.sidebar.markdown("---")
 pages = {
     "🏠 Home": "home",
     "💬 Basic LLM Call": "llm_call",
-    "🔧 LLM + Tool Call": "tool_call", 
+    "🔧 LLM + Tool Calling": "tool_call", 
     "🔄 ReAct Agent": "react_agent",
-    "🤝 Multi-Agent Workflow": "multi_agent",
-    "⚖️ ReAct vs Multi-Agent": "comparison",
-    "🔌 What is MCP?": "mcp_intro",
-    "🛠️ Simple MCP Example": "mcp_example",
-    "⚡ Exa API vs MCP": "exa_comparison",
-    "🌐 Remote vs Local MCPs": "remote_mcp_comparison"
+    "🤝 Multi-Agent": "multi_agent",
+    "⚖️ Architecture Comparison": "comparison",
+    "🔌 MCP Introduction": "mcp_intro",
+    "🛠️ MCP Examples": "mcp_example",
+    "⚡ API vs MCP": "exa_comparison",
+    "🌐 MCP Deployment": "remote_mcp_comparison"
 }
 
 # Get the selected page from query params or default to home
@@ -149,54 +168,80 @@ for page_name, page_key in pages.items():
     if st.sidebar.button(page_name, key=f"nav_{page_key}"):
         st.session_state.page = page_key
 
-
-
 # Route to the appropriate page
 if st.session_state.page == "home":
-    st.markdown("## 🎯 Explore AI Agents")
+    st.markdown("## 🎯 Master AI Agents & Model Context Protocol")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 🚀 Demo Flow")
+        st.markdown("### 🚀 Learning Path")
         st.markdown("""
-        1. **Basic LLM Call** - Simple AI conversations
-        2. **LLM + Tool Call** - AI with external tools
-        3. **ReAct Agent** - AI that thinks and acts
-        4. **Multi-Agent** - Multiple AIs collaborating
+        **🔰 Fundamentals:**
+        1. **💬 Basic LLM Call** - OpenAI API basics & structured output
+        2. **🔧 LLM + Tool Calling** - Connect AI to real APIs
+        3. **🔄 ReAct Agent** - AI reasoning loops with live debugging
+        4. **🤝 Multi-Agent** - Specialized AI teams (OpenAI Agents SDK)
         
-        **🔌 MCP Deep Dive:**
-        5. **What is MCP?** - Introduction to Model Context Protocol
-        6. **Simple MCP Example** - Build your first MCP server
-        7. **Exa API vs MCP** - Why MCPs are better than APIs
-        8. **Remote vs Local MCPs** - Deployment options and protocols
+        **🔌 Model Context Protocol (MCP):**
+        5. **MCP Introduction** - Universal AI-tool connection standard
+        6. **MCP Examples** - Build real servers (file, weather, analytics)
+        7. **API vs MCP** - Why MCPs beat traditional integrations
+        8. **MCP Deployment** - Local vs remote server options
         """)
         
     with col2:
-        st.markdown("### 🧠 Key Concepts")
+        st.markdown("### 🧠 What You'll Build")
         st.markdown("""
-        **MCP**: Universal standard for connecting AI to external tools and data
+        **🔧 Real Integrations:**
+        - OpenWeatherMap API integration
+        - Mathematical expression evaluator
+        - File system operations via MCP
+        - Real-time web search with Exa AI
         
-        **Agents**: AI that can plan and take actions autonomously
-        
-        **ReAct**: Reasoning + Acting in iterative loops
-        
-        **Multi-Agent**: Specialized AIs working together on complex tasks
-        
-        **Tools vs Resources**: Actions vs Data in the MCP framework
+        **🤖 Agent Systems:**
+        - Autonomous ReAct reasoning loops
+        - Multi-agent workflows with handoffs
+        - Cost tracking and debugging tools
+        - Production-ready MCP servers
         """)
     
     st.markdown("---")
     
+    # Feature highlights
+    st.markdown("### ✨ Interactive Features")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.info("""
+        **🔍 Live Debugging**
+        
+        See LLM inputs, outputs, and tool calls in real-time.
+        """)
+    
+    with col2:
+        st.info("""
+        **🌐 Real API Integration**
+        
+        Connect to OpenWeatherMap and Exa AI with your API keys.
+        """)
+    
+    with col3:
+        st.info("""
+        **📋 Copy-Paste Code**
+        
+        Production-ready code for your projects.
+        """)
+    
     # Quick start info
     if DEFAULTS_AVAILABLE:
         st.markdown("### 🚀 Quick Start")
-        st.info("💡 **Ready to go!** API keys loaded from `.env` file. Just select 'Use Default Keys' in the sidebar and start exploring!")
+        st.success("💡 **Ready to go!** API keys loaded from `.env` file. Just select 'Use Default Keys' in the sidebar and start exploring!")
     else:
         st.markdown("### 🔑 Setup Required")
         st.warning("⚠️ No API keys found in `.env` file. Select 'Enter Manually' in the sidebar to add your keys.")
     
-    st.markdown("### 👈 Pick a demo from the sidebar")
+    st.markdown("### 👈 Pick a demo from the sidebar to get started")
 
 elif st.session_state.page == "llm_call":
     exec(open("apps/pages/llm_call.py").read())

@@ -33,7 +33,7 @@ def calculate_cost(model, input_text, output_text):
     
     return f"${total_cost:.6f} (≈{input_tokens + output_tokens} tokens)"
 
-st.markdown("# 🔄 ReAct Agent (LLM + Tools + Loop)")
+st.markdown("# 🔄 ReAct Agent (Reasoning + Acting)")
 st.markdown("---")
 
 st.markdown("""
@@ -44,13 +44,9 @@ AI that thinks in loops:
 3. 👀 **Observe**: Check results
 4. 🔄 **Repeat** until done
 
-**🌐 Enhanced with Exa**: While this demo uses mock tools, real ReAct agents can use Exa AI for:
-- Real-time web search and research
-- Company and market analysis
-- Academic paper discovery
-- Social media trend analysis
+**💡 What you'll learn:** How to build autonomous agents that can break down complex tasks and use tools intelligently.
 
-💡 **Try Exa yourself**: [Exa Playground](https://dashboard.exa.ai/playground/search)
+**🌐 Enhanced with Exa**: Enable real-time web search and research capabilities with your Exa API key!
 """)
 
 # Check for API keys from session state

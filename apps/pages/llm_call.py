@@ -7,8 +7,15 @@ st.markdown("# 💬 Basic LLM Call")
 st.markdown("---")
 
 st.markdown("""
-### 🎯 Basic LLM Interaction
-Send a message to AI, get a response. Simple as that.
+### 🎯 Master LLM Fundamentals
+Learn the building blocks of AI applications:
+
+🔹 **Simple Conversations** - Send prompts, get responses  
+🔹 **Structured Output** - Get JSON instead of text using Pydantic models  
+🔹 **Usage Tracking** - Monitor tokens and costs  
+🔹 **Model Selection** - Compare GPT-4o-mini, GPT-3.5-turbo, and GPT-4  
+
+**💡 What you'll learn:** How to make basic OpenAI API calls and extract structured data for real applications.
 """)
 
 # Check for API key from session state

@@ -6,8 +6,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def show():
-    st.title("⚡ Exa API vs Exa MCP")
-    st.markdown("*Why MCPs are superior for LLM integration*")
+    st.title("⚡ Exa API vs Exa MCP Integration")
+    st.markdown("*Why Model Context Protocol is superior to traditional API integration*")
+    
+    # Overview
+    st.markdown("---")
+    st.markdown("""
+    ## 🎯 The Integration Evolution
+    Compare traditional API integration vs. MCP approach using Exa AI:
+    
+    🔹 **Traditional API** - Custom integration for each LLM provider  
+    🔹 **MCP Approach** - Universal standard that works everywhere  
+    🔹 **Code Comparison** - Implementation complexity differences  
+    🔹 **Maintenance Benefits** - Why MCPs reduce long-term costs  
+    
+    **Features:** Real code examples, step-by-step comparison, practical benefits.
+    """)
     
     # Overview
     st.markdown("---")

@@ -1,7 +1,19 @@
 import streamlit as st
 
-st.markdown("# ⚖️ ReAct vs Multi-Agent Comparison")
+st.markdown("# ⚖️ ReAct vs Multi-Agent Architecture")
 st.markdown("---")
+
+st.markdown("""
+### 🎯 Choose the Right Agent Architecture
+Compare two approaches to building AI agents:
+
+🔹 **ReAct (Single Agent)** - One AI reasons through problems step-by-step  
+🔹 **Multi-Agent (Team)** - Multiple specialized AIs working together  
+🔹 **Code Comparison** - Side-by-side implementations  
+🔹 **Exa Integration** - How each approach handles real-time web search  
+
+**Features:** Actual code examples, use case guidance, trade-off analysis.
+""")
 
 
 # Code Comparison
