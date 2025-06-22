@@ -500,6 +500,9 @@ Be thorough and use multiple tools when helpful."""
             iteration = 0
             execution_steps = []
             
+            # Create placeholder for real-time updates
+            live_output = st.empty()
+            
             with st.container():
                 while iteration < max_iterations:
                     iteration += 1
@@ -514,14 +517,40 @@ Be thorough and use multiple tools when helpful."""
                     }
                     
                     try:
-                        with st.spinner(f"Agent is thinking (iteration {iteration})..."):
-                            response = client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=messages,
-                                tools=tools,
-                                tool_choice="auto",
-                                temperature=0.1
-                            )
+                        # Show current step status
+                        with live_output.container():
+                            st.markdown(f"### 🔄 Step {iteration} - AI is thinking...")
+                            
+                            # Show the current messages being sent to LLM
+                            with st.expander(f"📤 LLM Input (Step {iteration})", expanded=True):
+                                st.markdown("**Messages being sent to LLM:**")
+                                for i, msg in enumerate(messages):
+                                    role = msg.get("role", "unknown")
+                                    content = msg.get("content", "")
+                                    
+                                    if role == "system":
+                                        st.info(f"**System:** {content}")
+                                    elif role == "user":
+                                        st.success(f"**User:** {content}")
+                                    elif role == "assistant":
+                                        if content:
+                                            st.warning(f"**Assistant:** {content}")
+                                        if msg.get("tool_calls"):
+                                            st.warning(f"**Assistant:** [Used {len(msg['tool_calls'])} tools]")
+                                    elif role == "tool":
+                                        tool_name = msg.get("name", "unknown")
+                                        st.error(f"**Tool ({tool_name}):** {content[:100]}...")
+                                
+                                st.markdown(f"**Model:** gpt-4o-mini | **Temperature:** 0.1")
+                        
+                        # Make the API call
+                        response = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=messages,
+                            tools=tools,
+                            tool_choice="auto",
+                            temperature=0.1
+                        )
                         
                         response_message = response.choices[0].message
                         messages.append(response_message.model_dump())
@@ -535,66 +564,140 @@ Be thorough and use multiple tools when helpful."""
                         if response_message.content:
                             step_data["thinking"] = response_message.content
                         
+                        # Show LLM response in real-time
+                        with live_output.container():
+                            st.markdown(f"### ✅ Step {iteration} - LLM Response Received")
+                            
+                            with st.expander(f"📥 LLM Output (Step {iteration})", expanded=True):
+                                st.markdown("**LLM Response:**")
+                                if response_message.content:
+                                    st.success(f"**Thinking:** {response_message.content}")
+                                
+                                if response_message.tool_calls:
+                                    st.info(f"**Tool Calls:** {len(response_message.tool_calls)} tools requested")
+                                    for i, tool_call in enumerate(response_message.tool_calls):
+                                        st.code(f"Tool {i+1}: {tool_call.function.name}({tool_call.function.arguments})", language="json")
+                                else:
+                                    st.warning("**No tool calls - Agent is done!**")
+                                
+                                # Show cost
+                                st.markdown(f"**💰 API Cost:** {step_data['api_cost']}")
+                            
+                            # Show current conversation state
+                            with st.expander(f"💬 Conversation State (Step {iteration})", expanded=False):
+                                st.markdown(f"**Total messages in conversation:** {len(messages)}")
+                                st.code(json.dumps(messages[-1], indent=2), language="json")
+                        
                         # Handle tool calls
                         if response_message.tool_calls:
-                            for tool_call in response_message.tool_calls:
-                                function_name = tool_call.function.name
-                                function_args = json.loads(tool_call.function.arguments)
+                            # Update display to show tool execution
+                            with live_output.container():
+                                st.markdown(f"### 🔧 Step {iteration} - Executing Tools")
                                 
-                                tool_data = {
-                                    "name": function_name,
-                                    "args": function_args,
-                                    "result": None,
-                                    "raw_output": None,
-                                    "error": None,
-                                    "cost": "Not available"  # Tool execution cost
-                                }
-                                
-                                try:
-                                    # Execute tool
-                                    function_response = available_functions[function_name](**function_args)
-                                    tool_data["result"] = function_response
-                                    tool_data["raw_output"] = str(function_response)  # Store raw output
+                                for idx, tool_call in enumerate(response_message.tool_calls):
+                                    function_name = tool_call.function.name
+                                    function_args = json.loads(tool_call.function.arguments)
                                     
-                                    # Add tool response to conversation
-                                    messages.append({
-                                        "tool_call_id": tool_call.id,
-                                        "role": "tool",
+                                    tool_data = {
                                         "name": function_name,
-                                        "content": function_response,
-                                    })
+                                        "args": function_args,
+                                        "result": None,
+                                        "raw_output": None,
+                                        "error": None,
+                                        "cost": "Not available"  # Tool execution cost
+                                    }
                                     
-                                except Exception as tool_error:
-                                    tool_data["error"] = str(tool_error)
-                                    # Add error response to conversation
-                                    messages.append({
-                                        "tool_call_id": tool_call.id,
-                                        "role": "tool",
-                                        "name": function_name,
-                                        "content": f"Error: {str(tool_error)}",
-                                    })
+                                    # Show tool execution in real-time
+                                    with st.expander(f"🔧 Tool {idx+1}: {function_name}", expanded=True):
+                                        st.markdown(f"**Function:** `{function_name}`")
+                                        st.code(json.dumps(function_args, indent=2), language="json")
+                                        
+                                        with st.spinner(f"Executing {function_name}..."):
+                                            try:
+                                                # Execute tool
+                                                function_response = available_functions[function_name](**function_args)
+                                                tool_data["result"] = function_response
+                                                tool_data["raw_output"] = str(function_response)  # Store raw output
+                                                
+                                                # Show successful result
+                                                st.success(f"**✅ Success!** Tool executed successfully")
+                                                st.info(f"**Result:** {function_response}")
+                                                
+                                                # Add tool response to conversation
+                                                messages.append({
+                                                    "tool_call_id": tool_call.id,
+                                                    "role": "tool",
+                                                    "name": function_name,
+                                                    "content": function_response,
+                                                })
+                                                
+                                            except Exception as tool_error:
+                                                tool_data["error"] = str(tool_error)
+                                                
+                                                # Show error
+                                                st.error(f"**❌ Error!** Tool execution failed")
+                                                st.error(f"**Error:** {str(tool_error)}")
+                                                
+                                                # Add error response to conversation
+                                                messages.append({
+                                                    "tool_call_id": tool_call.id,
+                                                    "role": "tool",
+                                                    "name": function_name,
+                                                    "content": f"Error: {str(tool_error)}",
+                                                })
+                                    
+                                    step_data["tool_calls"].append(tool_data)
                                 
-                                step_data["tool_calls"].append(tool_data)
+                                # Show updated conversation state after tools
+                                with st.expander(f"💬 Updated Conversation (After Tools)", expanded=False):
+                                    st.markdown(f"**Total messages now:** {len(messages)}")
+                                    st.markdown("**Last few tool responses:**")
+                                    for msg in messages[-len(response_message.tool_calls):]:
+                                        if msg.get("role") == "tool":
+                                            st.code(f"Tool ({msg.get('name')}): {msg.get('content', '')[:100]}...", language="text")
                         
                         else:
                             # No more tool calls, agent is done
                             step_data["final_response"] = response_message.content
                             execution_steps.append(step_data)
+                            
+                            # Show final completion
+                            with live_output.container():
+                                st.markdown(f"### 🎉 Step {iteration} - Task Completed!")
+                                st.success("**Agent has finished the task - no more tools needed**")
+                                if response_message.content:
+                                    st.markdown("**Final Response:**")
+                                    st.info(response_message.content)
                             break
                         
                         execution_steps.append(step_data)
                         
+                        # Add delay and show transition to next step
+                        with live_output.container():
+                            st.markdown(f"### ⏳ Preparing Step {iteration + 1}...")
+                            st.info("Agent will continue thinking with the new information...")
+                        
+                        time.sleep(2)  # Longer delay to see each step
+                        
                     except Exception as e:
                         step_data["error"] = str(e)
                         execution_steps.append(step_data)
-                        st.error(f"❌ Error in iteration {iteration}: {str(e)}")
+                        
+                        # Show error in real-time
+                        with live_output.container():
+                            st.markdown(f"### ❌ Step {iteration} - Error Occurred")
+                            st.error(f"**Error in iteration {iteration}:** {str(e)}")
                         break
-                    
-                    # Small delay for better UX
-                    time.sleep(0.5)
+                
+                # Clear the live output and show completion status
+                live_output.empty()
                 
                 if iteration >= max_iterations and not any(step.get("final_response") for step in execution_steps):
                     st.warning(f"⏰ Agent reached maximum iterations ({max_iterations}). Task may not be fully complete.")
+                else:
+                    st.success("🎉 **ReAct Agent execution completed!**")
+                
+                st.markdown("---")
                 
                 # Display execution steps in collapsible format
                 st.markdown("### 📋 Execution Steps")

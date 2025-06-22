@@ -133,6 +133,40 @@ print(response.choices[0].message.content)
         except Exception as e:
             st.error(f"Error: {str(e)}")
     
+    # Show Pydantic class and code for structured output
+    with st.expander("👨‍💻 Show Pydantic Class & Structured Output Code"):
+        st.markdown("**Pydantic Model Definition:**")
+        st.code("""
+class EmailStructure(BaseModel):
+    subject: str
+    body: str
+    tone: str
+    urgency: Optional[str] = None
+        """, language="python")
+        
+        st.markdown("**LLM Call with Structured Output:**")
+        st.code("""
+# Make structured output request
+response = client.beta.chat.completions.parse(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "system", "content": "You are a professional email assistant."},
+        {"role": "user", "content": email_prompt}
+    ],
+    response_format=EmailStructure
+)
+
+# Parse the structured response
+email_data = response.choices[0].message.parsed
+
+# Access structured fields
+print(f"Subject: {email_data.subject}")
+print(f"Body: {email_data.body}")
+print(f"Tone: {email_data.tone}")
+if email_data.urgency:
+    print(f"Urgency: {email_data.urgency}")
+        """, language="python")
+    
     # Additional structured output example
     st.markdown("---")
     st.markdown("### 📊 Advanced Structured Output")
@@ -148,7 +182,7 @@ print(response.choices[0].message.content)
     analysis_prompt = st.text_area(
         "Product to analyze:", 
         value="iPhone 15 Pro smartphone",
-        height=60
+        height=68
     )
     
     if st.button("🔍 Analyze Product", type="secondary"):
@@ -191,7 +225,7 @@ print(response.choices[0].message.content)
         except Exception as e:
             st.error(f"Error: {str(e)}")
     
-    with st.expander("Show structured output code"):
+    with st.expander("📋 Show structured output code"):
         st.code("""
 from pydantic import BaseModel
 from typing import Optional, List
@@ -230,7 +264,7 @@ product_response = client.beta.chat.completions.parse(
     model="gpt-4o-mini",
     messages=[
         {"role": "system", "content": "You are a product analysis expert."},
-        {"role": "user", "content": "Analyze the iPhone 15 Pro"}
+        {"role": "user", "content": "Analyze the iPhone 15 Pro")
     ],
     response_format=ProductAnalysis
 )

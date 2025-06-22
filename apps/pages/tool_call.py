@@ -33,11 +33,65 @@ if api_key:
     
     # Define some example tools
     def get_weather(city: str) -> str:
-        """Get current weather for a city (mock function)"""
-        weather_options = ["sunny ☀️", "cloudy ☁️", "rainy 🌧️", "snowy ❄️"]
-        temp = random.randint(15, 30)
-        weather = random.choice(weather_options)
-        return f"The weather in {city} is {weather} with a temperature of {temp}°C"
+        """Get current weather for a city using OpenWeatherMap API"""
+        try:
+            # Check if weather API key is available
+            weather_api_key = st.session_state.get("weather_api_key")
+            
+            if not weather_api_key:
+                # Fallback to mock data if no API key
+                weather_options = ["sunny ☀️", "cloudy ☁️", "rainy 🌧️", "snowy ❄️"]
+                temp = random.randint(15, 30)
+                weather = random.choice(weather_options)
+                return f"The weather in {city} is {weather} with a temperature of {temp}°C (mock data - add OpenWeatherMap API key for real data)"
+            
+            # OpenWeatherMap API call
+            base_url = "http://api.openweathermap.org/data/2.5/weather"
+            params = {
+                "q": city,
+                "appid": weather_api_key,
+                "units": "metric"  # Celsius
+            }
+            
+            response = requests.get(base_url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Extract weather information
+                temp = round(data["main"]["temp"])
+                feels_like = round(data["main"]["feels_like"])
+                humidity = data["main"]["humidity"]
+                description = data["weather"][0]["description"].title()
+                
+                # Weather emoji mapping
+                weather_id = data["weather"][0]["id"]
+                if weather_id < 300:
+                    emoji = "⛈️"  # Thunderstorm
+                elif weather_id < 400:
+                    emoji = "🌧️"  # Drizzle
+                elif weather_id < 600:
+                    emoji = "🌧️"  # Rain
+                elif weather_id < 700:
+                    emoji = "❄️"  # Snow
+                elif weather_id < 800:
+                    emoji = "🌫️"  # Atmosphere (fog, mist, etc.)
+                elif weather_id == 800:
+                    emoji = "☀️"  # Clear
+                else:
+                    emoji = "☁️"  # Clouds
+                
+                return f"The weather in {city} is {description} {emoji} with a temperature of {temp}°C (feels like {feels_like}°C). Humidity: {humidity}%"
+            
+            elif response.status_code == 404:
+                return f"City '{city}' not found. Please check the spelling and try again."
+            else:
+                return f"Error getting weather data for {city}. API returned status code: {response.status_code}"
+                
+        except requests.exceptions.RequestException as e:
+            return f"Network error while getting weather for {city}: {str(e)}"
+        except Exception as e:
+            return f"Error getting weather for {city}: {str(e)}"
     
     def calculate(expression: str) -> str:
         """Safely calculate mathematical expressions"""
@@ -122,7 +176,11 @@ if api_key:
     st.markdown("### 🛠️ Available Tools")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.info("🌤️ **Weather**\nGet weather for any city")
+        weather_api_key = st.session_state.get("weather_api_key")
+        if weather_api_key:
+            st.info("🌤️ **Weather** ✅\nReal weather data via OpenWeatherMap API")
+        else:
+            st.info("🌤️ **Weather** 🎲\nMock weather data (add API key for real data)")
     with col2:
         st.info("🧮 **Calculator**\nPerform math calculations")
     with col3:
