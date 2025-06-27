@@ -99,14 +99,6 @@ else:
         help="Get your API key from https://exa.ai/",
         key="global_exa_key"
     )
-    
-    # Weather API Key (OpenWeatherMap)
-    weather_api_key = st.sidebar.text_input(
-        "Weather API Key (Optional):", 
-        type="password", 
-        help="Get your free API key from https://openweathermap.org/api",
-        key="global_weather_key"
-    )
 
 # Store API keys in session state for global access
 if api_key:
@@ -119,24 +111,13 @@ if exa_api_key:
 else:
     st.session_state.exa_api_key = None
 
-if weather_api_key:
-    st.session_state.weather_api_key = weather_api_key
-else:
-    st.session_state.weather_api_key = None
-
 # Status indicators for manual entry mode
 if key_mode == "Enter Manually":
     if api_key and exa_api_key:
         st.sidebar.success("✅ Core API Keys Set!")
-        if weather_api_key:
-            st.sidebar.success("✅ Weather API Key Set!")
-        else:
-            st.sidebar.info("💡 Add Weather key for real weather data")
     elif api_key:
         st.sidebar.success("✅ OpenAI Key Set!")
         st.sidebar.info("💡 Add EXA key for enhanced multi-agent features")
-        if weather_api_key:
-            st.sidebar.info("✅ Weather API Key Set!")
     elif exa_api_key:
         st.sidebar.success("✅ EXA Key Set!")
         st.sidebar.info("💡 Add OpenAI key to use interactive features")

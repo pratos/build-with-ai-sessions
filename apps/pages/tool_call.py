@@ -32,66 +32,16 @@ if api_key:
     client = openai.Client(api_key=api_key)
     
     # Define some example tools
-    def get_weather(city: str) -> str:
-        """Get current weather for a city using OpenWeatherMap API"""
+    def get_weather(latitude, longitude):
+        """Get current weather for a location using coordinates"""
         try:
-            # Check if weather API key is available
-            weather_api_key = st.session_state.get("weather_api_key")
-            
-            if not weather_api_key:
-                # Fallback to mock data if no API key
-                weather_options = ["sunny ☀️", "cloudy ☁️", "rainy 🌧️", "snowy ❄️"]
-                temp = random.randint(15, 30)
-                weather = random.choice(weather_options)
-                return f"The weather in {city} is {weather} with a temperature of {temp}°C (mock data - add OpenWeatherMap API key for real data)"
-            
-            # OpenWeatherMap API call
-            base_url = "http://api.openweathermap.org/data/2.5/weather"
-            params = {
-                "q": city,
-                "appid": weather_api_key,
-                "units": "metric"  # Celsius
-            }
-            
-            response = requests.get(base_url, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Extract weather information
-                temp = round(data["main"]["temp"])
-                feels_like = round(data["main"]["feels_like"])
-                humidity = data["main"]["humidity"]
-                description = data["weather"][0]["description"].title()
-                
-                # Weather emoji mapping
-                weather_id = data["weather"][0]["id"]
-                if weather_id < 300:
-                    emoji = "⛈️"  # Thunderstorm
-                elif weather_id < 400:
-                    emoji = "🌧️"  # Drizzle
-                elif weather_id < 600:
-                    emoji = "🌧️"  # Rain
-                elif weather_id < 700:
-                    emoji = "❄️"  # Snow
-                elif weather_id < 800:
-                    emoji = "🌫️"  # Atmosphere (fog, mist, etc.)
-                elif weather_id == 800:
-                    emoji = "☀️"  # Clear
-                else:
-                    emoji = "☁️"  # Clouds
-                
-                return f"The weather in {city} is {description} {emoji} with a temperature of {temp}°C (feels like {feels_like}°C). Humidity: {humidity}%"
-            
-            elif response.status_code == 404:
-                return f"City '{city}' not found. Please check the spelling and try again."
-            else:
-                return f"Error getting weather data for {city}. API returned status code: {response.status_code}"
-                
-        except requests.exceptions.RequestException as e:
-            return f"Network error while getting weather for {city}: {str(e)}"
+            response = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,wind_speed_10m&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m")
+            data = response.json()
+            temperature = data['current']['temperature_2m']
+            wind_speed = data['current']['wind_speed_10m']
+            return f"Weather at coordinates ({latitude}, {longitude}): {temperature}°C, wind speed {wind_speed} km/h"
         except Exception as e:
-            return f"Error getting weather for {city}: {str(e)}"
+            return f"Error getting weather for coordinates ({latitude}, {longitude}): {str(e)}"
     
     def calculate(expression: str) -> str:
         """Safely calculate mathematical expressions"""
@@ -123,16 +73,20 @@ if api_key:
             "type": "function",
             "function": {
                 "name": "get_weather",
-                "description": "Get current weather information for a specific city",
+                "description": "Get current weather information for a specific location using coordinates",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "city": {
-                            "type": "string",
-                            "description": "The city name to get weather for"
+                        "latitude": {
+                            "type": "number",
+                            "description": "Latitude coordinate for the location"
+                        },
+                        "longitude": {
+                            "type": "number",
+                            "description": "Longitude coordinate for the location"
                         }
                     },
-                    "required": ["city"]
+                    "required": ["latitude", "longitude"]
                 }
             }
         },
@@ -187,6 +141,12 @@ if api_key:
         st.info("⏰ **Time**\nGet current date/time")
     
     st.markdown("### 💬 Try Tool-Enhanced AI")
+    
+    st.error("""
+    **🚨 Important Note:**
+    - The weather tool uses coordinates (latitude, longitude) instead of city names.
+    - Example: "What's the weather in Tokyo and London?" should be "What's the weather in Tokyo (35.6762, 139.6503) and London (51.5074, -0.1278)?"
+    """)
     
     user_prompt = st.text_area(
         "Ask something that requires tools:", 

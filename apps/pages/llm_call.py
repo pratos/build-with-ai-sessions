@@ -1,7 +1,8 @@
 import streamlit as st
 import openai
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field, EmailStr, field_validator
+from typing import List, Optional
+import json
 
 st.markdown("# 💬 Basic LLM Call")
 st.markdown("---")
@@ -174,114 +175,228 @@ if email_data.urgency:
     print(f"Urgency: {email_data.urgency}")
         """, language="python")
     
-    # Additional structured output example
+    # Research Paper Data Extraction
     st.markdown("---")
-    st.markdown("### 📊 Advanced Structured Output")
+    st.markdown("### 📄 Research Paper Data Extraction")
+    st.markdown("Extract structured data from academic papers with email validation.")
     
-    class ProductAnalysis(BaseModel):
-        product_name: str
-        pros: List[str]
-        cons: List[str]
-        rating: int  # 1-10
-        recommendation: str
-        target_audience: List[str]
+    class ResearchPaperData(BaseModel):
+        """Structured data extraction from research papers"""
+        authors: List[str] = Field(description="List of all authors mentioned in the paper")
+        author_emails: List[EmailStr] = Field(description="List of email addresses of the authors")
+        title: str = Field(description="Title of the research paper")
+        novel_architecture_patterns: List[str] = Field(
+            description="List of novel architecture patterns, frameworks, or methodologies introduced in the paper"
+        )
+        
+        @field_validator('author_emails')
+        @classmethod
+        def validate_emails(cls, v):
+            """Validate that all emails are properly formatted"""
+            if not v:
+                raise ValueError("At least one author email must be provided")
+            
+            # Additional validation beyond EmailStr
+            for email in v:
+                if '@' not in str(email):
+                    raise ValueError(f"Invalid email format: {email}")
+                if len(str(email)) < 5:
+                    raise ValueError(f"Email too short: {email}")
+            return v
+        
+        @field_validator('authors')
+        @classmethod
+        def validate_authors(cls, v):
+            """Validate authors list"""
+            if not v:
+                raise ValueError("At least one author must be provided")
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate authors found")
+            return v
+        
+        @field_validator('novel_architecture_patterns')
+        @classmethod
+        def validate_patterns(cls, v):
+            """Validate architecture patterns"""
+            if not v:
+                raise ValueError("At least one novel architecture pattern must be identified")
+            return v
     
-    analysis_prompt = st.text_area(
-        "Product to analyze:", 
-        value="iPhone 15 Pro smartphone",
-        height=68
+    # Sample research paper text for demonstration
+    sample_paper_text = """Title: "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context"
+
+Authors: Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov
+
+Contact: zihangd@cs.cmu.edu, zhiliny@cs.cmu.edu, yiming@cs.cmu.edu
+
+Abstract: This paper introduces Transformer-XL, a novel neural architecture that enables 
+learning dependency beyond a fixed length without disrupting temporal coherence. The key 
+innovation is the segment-level recurrence mechanism and relative positional encoding scheme.
+
+Novel Contributions:
+1. Segment-level recurrence mechanism for longer context modeling
+2. Relative positional encoding to handle variable sequence lengths
+3. Attention caching mechanism for computational efficiency
+4. State reuse across segments for better memory utilization"""
+    
+    # Text input for paper content
+    paper_content = st.text_area(
+        "📄 Enter research paper content:",
+        value=sample_paper_text,
+        height=200,
+        help="Paste the research paper text here for data extraction"
     )
     
-    if st.button("🔍 Analyze Product", type="secondary"):
-        try:
-            with st.spinner("🔄 Analyzing product..."):
-                response = client.beta.chat.completions.parse(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a product analysis expert. Provide balanced, detailed product reviews."},
-                        {"role": "user", "content": f"Analyze this product: {analysis_prompt}"}
-                    ],
-                    response_format=ProductAnalysis
-                )
-            
-            product_data = response.choices[0].message.parsed
-            
-            st.markdown("### 📱 Product Analysis:")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"**Product:** {product_data.product_name}")
-                st.metric("Rating", f"{product_data.rating}/10")
+    if st.button("🔍 Extract Paper Data", type="secondary"):
+        if not paper_content.strip():
+            st.error("Please enter some paper content to analyze.")
+        else:
+            try:
+                with st.spinner("🤖 Extracting structured data from paper..."):
+                    completion = client.beta.chat.completions.parse(
+                        model=model,
+                        messages=[
+                            {
+                                "role": "system", 
+                                "content": """You are an expert research paper analyst. Extract structured data from academic papers including:
+                                - All authors mentioned
+                                - Email addresses of authors (if available)
+                                - Paper title
+                                - Novel architecture patterns, frameworks, or methodologies introduced
+                                
+                                Be thorough and accurate in your extraction."""
+                            },
+                            {
+                                "role": "user", 
+                                "content": f"Extract structured data from this research paper:\n\n{paper_content}"
+                            }
+                        ],
+                        response_format=ResearchPaperData,
+                    )
                 
-                st.markdown("**✅ Pros:**")
-                for pro in product_data.pros:
-                    st.success(f"• {pro}")
+                # Display results
+                paper_data = completion.choices[0].message.parsed
                 
-                st.markdown("**❌ Cons:**")
-                for con in product_data.cons:
-                    st.error(f"• {con}")
-            
-            with col2:
-                st.markdown("**🎯 Target Audience:**")
-                for audience in product_data.target_audience:
-                    st.info(f"• {audience}")
+                st.success("✅ Successfully extracted paper data!")
                 
-                st.markdown("**💡 Recommendation:**")
-                st.text_area("", value=product_data.recommendation, height=150, disabled=True)
+                # Display extracted data in organized sections
+                col1, col2 = st.columns(2)
                 
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+                with col1:
+                    st.subheader("👥 Authors")
+                    for i, author in enumerate(paper_data.authors, 1):
+                        st.write(f"{i}. {author}")
+                    
+                    st.subheader("📧 Author Emails")
+                    for i, email in enumerate(paper_data.author_emails, 1):
+                        st.write(f"{i}. {email}")
+                
+                with col2:
+                    st.subheader("📄 Paper Title")
+                    st.write(paper_data.title)
+                    
+                    st.subheader("🏗️ Novel Architecture Patterns")
+                    for i, pattern in enumerate(paper_data.novel_architecture_patterns, 1):
+                        st.write(f"{i}. {pattern}")
+                
+                # Show raw structured data
+                with st.expander("🔍 View Raw Structured Data"):
+                    st.json(paper_data.model_dump())
+                    
+            except Exception as e:
+                st.error(f"Error during extraction: {str(e)}")
     
-    with st.expander("📋 Show structured output code"):
+    with st.expander("👨‍💻 Show Research Paper Extraction Code"):
+        st.markdown("### Pydantic Model with Email Validation")
         st.code("""
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field, EmailStr, field_validator
+from typing import List
 
-# Define the structures we want
-class EmailStructure(BaseModel):
-    subject: str
-    body: str
-    tone: str
-    urgency: Optional[str] = None
-
-class ProductAnalysis(BaseModel):
-    product_name: str
-    pros: List[str]
-    cons: List[str]
-    rating: int  # 1-10
-    recommendation: str
-    target_audience: List[str]
-
-# Email structured output
-email_response = client.beta.chat.completions.parse(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "system", "content": "You are a professional email assistant."},
-        {"role": "user", "content": "Write a professional email asking for a day off"}
-    ],
-    response_format=EmailStructure
-)
-
-email_data = email_response.choices[0].message.parsed
-print(f"Subject: {email_data.subject}")
-print(f"Body: {email_data.body}")
-
-# Product analysis structured output
-product_response = client.beta.chat.completions.parse(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "system", "content": "You are a product analysis expert."},
-        {"role": "user", "content": "Analyze the iPhone 15 Pro")
-    ],
-    response_format=ProductAnalysis
-)
-
-product_data = product_response.choices[0].message.parsed
-print(f"Product: {product_data.product_name}")
-print(f"Rating: {product_data.rating}/10")
-print(f"Pros: {', '.join(product_data.pros)}")
-print(f"Target: {', '.join(product_data.target_audience)}")
+class ResearchPaperData(BaseModel):
+    \"\"\"Structured data extraction from research papers\"\"\"
+    authors: List[str] = Field(description="List of all authors mentioned in the paper")
+    author_emails: List[EmailStr] = Field(description="List of email addresses of the authors")
+    title: str = Field(description="Title of the research paper")
+    novel_architecture_patterns: List[str] = Field(
+        description="List of novel architecture patterns, frameworks, or methodologies introduced in the paper"
+    )
+    
+    @field_validator('author_emails')
+    @classmethod
+    def validate_emails(cls, v):
+        \"\"\"Validate that all emails are properly formatted\"\"\"
+        if not v:
+            raise ValueError("At least one author email must be provided")
+        
+        # Additional validation beyond EmailStr
+        for email in v:
+            if '@' not in str(email):
+                raise ValueError(f"Invalid email format: {email}")
+            if len(str(email)) < 5:
+                raise ValueError(f"Email too short: {email}")
+        return v
+    
+    @field_validator('authors')
+    @classmethod
+    def validate_authors(cls, v):
+        \"\"\"Validate authors list\"\"\"
+        if not v:
+            raise ValueError("At least one author must be provided")
+        if len(v) != len(set(v)):
+            raise ValueError("Duplicate authors found")
+        return v
+    
+    @field_validator('novel_architecture_patterns')
+    @classmethod
+    def validate_patterns(cls, v):
+        \"\"\"Validate architecture patterns\"\"\"
+        if not v:
+            raise ValueError("At least one novel architecture pattern must be identified")
+        return v
         """, language="python")
+        
+        st.markdown("### LLM Call with Structured Parsing")
+        st.code("""
+# Extract structured data from research paper
+completion = client.beta.chat.completions.parse(
+    model="gpt-4o-mini",
+    messages=[
+        {
+            "role": "system", 
+            "content": \"\"\"You are an expert research paper analyst. Extract structured data from academic papers including:
+            - All authors mentioned
+            - Email addresses of authors (if available)  
+            - Paper title
+            - Novel architecture patterns, frameworks, or methodologies introduced
+            
+            Be thorough and accurate in your extraction.\"\"\"
+        },
+        {
+            "role": "user", 
+            "content": f"Extract structured data from this research paper:\\n\\n{paper_content}"
+        }
+    ],
+    response_format=ResearchPaperData,
+)
+
+# Access the parsed structured data
+paper_data = completion.choices[0].message.parsed
+
+# Use the extracted data
+print(f"Title: {paper_data.title}")
+print(f"Authors: {paper_data.authors}")
+print(f"Emails: {paper_data.author_emails}")
+print(f"Novel Patterns: {paper_data.novel_architecture_patterns}")
+        """, language="python")
+        
+        st.markdown("### Key Features")
+        st.markdown("""
+        - **Email Validation**: Uses `EmailStr` type + custom `@field_validator` decorator
+        - **Required Fields**: All fields are required with descriptive error messages
+        - **Duplicate Prevention**: Validates no duplicate authors
+        - **Comprehensive Extraction**: Captures authors, emails, title, and novel patterns
+        - **Production Ready**: Includes proper error handling and validation
+        """)
 
 else:
     st.info("👆 Please enter your OpenAI API key in the sidebar to try the examples!")
@@ -314,4 +429,6 @@ with col2:
     - No access to real-time data
     - Can't perform actions
     - Limited to training knowledge
-    """) 
+    """)
+
+ 
