@@ -154,6 +154,7 @@ dmypy.json
 cython_debug/
 
 config.py
+node_modules/
 .wrangler/
 .vscode/
 
