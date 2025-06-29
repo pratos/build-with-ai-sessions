@@ -154,6 +154,8 @@ dmypy.json
 cython_debug/
 
 config.py
+.wrangler/
+.vscode/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

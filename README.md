@@ -26,10 +26,6 @@ source ~/.bashrc
 
 #### macOS
 ```bash
-# Install using Homebrew (recommended)
-brew install uv
-
-# Or using the install script
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
